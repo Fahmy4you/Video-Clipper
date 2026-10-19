@@ -1,0 +1,19 @@
+{
+  "result": "passed",
+  "viewports": [
+    1366,
+    768,
+    390
+  ],
+  "pageErrors": [],
+  "fixtureTests": [
+    "edit title",
+    "undo",
+    "redo",
+    "save revision",
+    "split layout",
+    "save before preview"
+  ],
+  "saves": 2,
+  "renders": 1
+}

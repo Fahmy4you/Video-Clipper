@@ -1,0 +1,20 @@
+{
+  "passed": true,
+  "liveModelCount": 19,
+  "font": {
+    "family": "Poppins, Arial, Helvetica, sans-serif",
+    "loaded": true
+  },
+  "viewports": [
+    1366,
+    768,
+    390
+  ],
+  "fixtureChecks": [
+    "selected model submitted",
+    "saved model shown",
+    "provider error",
+    "refresh recovery"
+  ],
+  "pageErrors": []
+}
