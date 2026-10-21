@@ -5,6 +5,7 @@ from PIL import Image,ImageDraw,ImageFont
 from .media import run,probe
 from .timeline import RESOLUTIONS,EditPlanV2
 from .config import ROOT
+from .mix_render import composite,fade_expr
 
 FONTS={'DejaVu Sans':ROOT/'apps/web/public/fonts/EditorDejaVu.ttf','Liberation Sans':ROOT/'apps/web/public/fonts/EditorLiberation.ttf','Poppins':ROOT/'apps/web/public/fonts/Poppins-SemiBold.ttf'}
 def text_image(text,style,w,h,words=None,frame=0):
@@ -88,7 +89,15 @@ def render_v2(source,plan,out,preview=False,check=lambda:None,ratio='9:16'):
         run(args,check);parts.append(target)
     listing=work/'parts.txt';listing.write_text('\n'.join(f"file '{p.resolve()}'\nduration {s['duration']/30:.12f}" for p,s in zip(parts,plan['segments'])))
     overlays=overlay_movie(plan,work,w,h,source.parent,check);tmp=out.with_suffix('.partial.mp4');duration=sum(s['duration'] for s in plan['segments'])/30
-    inputs=[];filters=['[0:v][1:v]overlay=shortest=1:format=auto,format=yuv420p[v]',f"[0:a]volume={plan['source_volume']}[baseaudio]"];labels=['[baseaudio]'];offset=0
+    visual_base=None
+    if any(s['broll'] for s in plan['segments']):
+        joined=work/'joined.mkv'
+        run(['ffmpeg','-y','-v','error','-f','concat','-safe','0','-i',str(listing),'-c','copy',str(joined)],check)
+        offset=0;items=[]
+        for segment in plan['segments']:
+            items.extend({**b,'start':b['start']+offset,'end':b['end']+offset} for b in segment['broll']);offset+=segment['duration']
+        visual_base=composite(joined,{'duration':offset,'broll':items},work/'mixed.mkv',w,h,check)
+    inputs=[];filters=[f'[0:v]fps=30,settb=1/30,setpts=N,tpad=stop_mode=clone:stop_duration=0.1,trim=end_frame={round(duration*30)}[basevideo];[basevideo][1:v]overlay=eof_action=repeat:format=auto,format=yuv420p[v]',f"[0:a]volume='{plan['source_volume']}*({fade_expr(plan['source_fade'],round(duration*30))})':eval=frame[baseaudio]"];labels=['[baseaudio]'];offset=0
     from uuid import UUID
     for segment in plan['segments']:
         for item in segment['audio']:
@@ -96,8 +105,8 @@ def render_v2(source,plan,out,preview=False,check=lambda:None,ratio='9:16'):
             if not asset.is_file():raise RuntimeError('Audio tambahan tidak ditemukan pada proyek ini.')
             inputs+=['-i',str(asset)];label=f'audio{index}'
             a=item['source_in']/30;b=(item['source_in']+item['end']-item['start'])/30;delay=round((offset+item['start'])*1000/30)
-            filters.append(f"[{index}:a]atrim=start={a}:end={b},asetpts=PTS-STARTPTS,volume={item['volume']},adelay={delay}:all=1[{label}]");labels.append(f'[{label}]')
+            filters.append(f"[{index}:a]atrim=start={a}:end={b},asetpts=PTS-STARTPTS,volume='{item['volume']}*({fade_expr(item['fade'],item['end']-item['start'])})':eval=frame,adelay={delay}:all=1[{label}]");labels.append(f'[{label}]')
         offset+=segment['duration']
-    filters.append(''.join(labels)+f'amix=inputs={len(labels)}:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.98:level=0:latency=1[audioout]')
-    run(['ffmpeg','-y','-v','error','-threads','2','-f','concat','-safe','0','-i',str(listing),'-i',str(overlays),*inputs,'-filter_complex_threads','1','-filter_complex',';'.join(filters),'-map','[v]','-map','[audioout]','-t',str(duration),'-c:v','libx264','-threads','2','-preset','veryfast','-crf','25' if preview else '20','-c:a','aac','-b:a','160k','-movflags','+faststart',str(tmp)],check)
+    filters.append(''.join(labels)+f'amix=inputs={len(labels)}:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.98:level=0:latency=1,apad,atrim=duration={duration}[audioout]')
+    run(['ffmpeg','-y','-v','error','-threads','2',*(['-i',str(visual_base)] if visual_base else ['-f','concat','-safe','0','-i',str(listing)]),'-i',str(overlays),*inputs,'-filter_complex_threads','1','-filter_complex',';'.join(filters),'-map','[v]','-map','[audioout]','-t',str(duration),'-c:v','libx264','-threads','2','-preset','veryfast','-crf','25' if preview else '20','-c:a','aac','-b:a','160k','-movflags','+faststart',str(tmp)],check)
     tmp.replace(out);shutil.rmtree(work)

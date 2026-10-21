@@ -2,6 +2,7 @@ import math
 import re
 from urllib.parse import urlparse, parse_qs
 from typing import Literal
+from .hashtags import Hashtags
 from .timeline import EditPlanV2, Ratio
 from pydantic import BaseModel, Field, model_validator, field_validator
 
@@ -26,6 +27,8 @@ class ModelOption(BaseModel):
     id: str
     name: str
 class ProjectInput(ModelSelection):
+    mix_hashtags: Hashtags = Field(default_factory=list)
+    visual_mode: Literal['podcast','mix'] = 'podcast'
     aspect_ratio: Ratio = '9:16'
     highlight_count: int = Field(default=3,ge=1,le=5)
     additional_prompt: str = Field(default='',max_length=4000)
@@ -87,6 +90,8 @@ class Highlights(BaseModel):
 from datetime import datetime
 from pydantic import ConfigDict
 class ProjectView(BaseModel):
+    mix_hashtags: Hashtags = Field(default_factory=list)
+    visual_mode: Literal['podcast','mix'] = 'podcast'
     aspect_ratio: Ratio
     highlight_count: int
     additional_prompt: str

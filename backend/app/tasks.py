@@ -44,6 +44,10 @@ def execute(job_id):
         if kind=='audio_import':
             asset=import_audio(folder,payload,lambda:check(job_id),lambda label,value:update(job_id,stage=label,progress=value))
             result={'asset_id':asset['id'],'url':asset['url']}
+        elif kind=='mix':
+            from .mix_generation import generate_mix
+            update(job_id,stage='Menyusun video sisipan',progress=80)
+            result=generate_mix(job_id,pid,payload,lambda:check(job_id))
         elif kind=='editor_media':
             update(job_id,stage='Menyiapkan proxy, thumbnail, waveform',progress=10)
             result=prepare_editor(folder,lambda:check(job_id))
@@ -54,6 +58,17 @@ def execute(job_id):
             result={'url':f'/api/media/{pid}/{out.name}','revision':payload['revision']}
         else:
             result=analyze(job_id,pid,url,folder,payload.get('gemini_model'),payload.get('highlight_count',3),payload.get('additional_prompt',''))
+        if kind=='analysis' and payload.get('visual_mode')=='mix':
+            from .mix_generation import generate_mix
+            update(job_id,stage='Menyusun video sisipan',progress=90)
+            try:
+                with Session() as session:mix_payload=session.get(Job,job_id).payload
+                generate_mix(job_id,pid,mix_payload,lambda:check(job_id))
+            except Cancelled:raise
+            except Exception:
+                with Session() as s:
+                    p=s.get(Project,pid);p.analysis_report={**p.analysis_report,'mix_status':'failed'};s.commit()
+                result={**result,'mix_status':'failed','message':'Highlight siap; Mix belum selesai. Coba lagi dari halaman proyek.'}
         update(job_id,status='succeeded',stage='Selesai',progress=100,result=result)
     except Cancelled: pass
     except Exception as e:
@@ -142,11 +157,19 @@ def analyze(jid,pid,url,folder,gemini_model,highlight_count=3,additional_prompt=
     with Session() as s:
         existing=s.scalars(select(Clip).where(Clip.project_id==pid)).all()
         # Retrying analysis never overwrites user edits.
+        created=[]
         if not existing:
             for h in valid:
                 start,end=align_highlight(h.start,h.end,words,duration)
                 plan=EditPlan(start=start,end=end,words=words_for_clip(words,start,end),layouts=[{'start':0,'mode':'a','a':.5,'b':.7}])
-                s.add(Clip(project_id=pid,title=h.title,reason=h.reason,plan=upgrade_plan(plan.model_dump(),f'{pid}-{h.start}'),fulfills_prompt=h.fulfills_prompt))
+                clip=Clip(project_id=pid,title=h.title,reason=h.reason,plan=upgrade_plan(plan.model_dump(),f'{pid}-{h.start}'),fulfills_prompt=h.fulfills_prompt);s.add(clip);s.flush();created.append(clip.id)
+        if created:
+            job=s.get(Job,jid);job.payload={**job.payload,'mix_target_ids':created}
         p=s.get(Project,pid); p.status='ready'; p.analysis_report={'requested':highlight_count,'generated':len(valid),'unmet_requests':highlights.unmet_requests+(['Materi hanya menghasilkan '+str(len(valid))+' highlight valid.'] if len(valid)<highlight_count else [])}; s.commit()
     write_json(folder/'highlights.json',{'clips':[h.model_dump() for h in valid]})
     return {'message':'Highlight siap diedit.'}
+
+@celery.task(name='video_clipping.prepare_library')
+def prepare_library(aid):
+    from .video_library import prepare
+    prepare(aid)

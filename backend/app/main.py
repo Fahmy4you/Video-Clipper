@@ -18,6 +18,10 @@ from .audio_assets import AudioImport,MAX_BYTES,audio_metadata
 from .model_catalog import available_models, validate_model
 
 app=FastAPI(title='Video Clipping API',version='0.1.0')
+from .hashtag_api import router as hashtag_router
+from .video_library import router as library_router,snapshot as library_snapshot,folder as library_folder
+app.include_router(library_router)
+app.include_router(hashtag_router)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=['localhost','127.0.0.1','testserver'])
 @app.middleware('http')
 async def local_origin(request, call_next):
@@ -92,11 +96,15 @@ def analysis(id:str,s:DBSession=Depends(session)):
     p=get(s,Project,id)
     if not p.gemini_model: raise HTTPException(422,'Pilih model Gemini untuk proyek ini terlebih dahulu.')
     validate_model(p.gemini_model)
-    return enqueue(s,id,'analysis',payload={'gemini_model':p.gemini_model,'aspect_ratio':p.aspect_ratio,'highlight_count':p.highlight_count,'additional_prompt':p.additional_prompt})
+    return enqueue(s,id,'analysis',payload={'gemini_model':p.gemini_model,'aspect_ratio':p.aspect_ratio,'highlight_count':p.highlight_count,'additional_prompt':p.additional_prompt,'visual_mode':p.visual_mode,'mix_hashtags':p.mix_hashtags,'library':library_snapshot(s,p.mix_hashtags) if p.visual_mode=='mix' else []})
 def validate_plan(plan,project):
     v2=upgrade_plan(plan.model_dump())
     if any(x['source_in']+x['duration']>round(project.duration*30) for x in v2['segments']):raise HTTPException(422,'Clip melebihi durasi sumber.')
     for segment in v2['segments']:
+        for item in segment.get('broll',[]):
+            try:meta=json.loads((library_folder(item['asset_id'])/'metadata.json').read_text())
+            except (ValueError,OSError):raise HTTPException(422,'Video sisipan tidak tersedia.')
+            if item['source_in']+item['end']-item['start']>meta['frames']:raise HTTPException(422,'Sisipan melewati akhir video koleksi.')
         for audio in segment.get('audio',[]):
             try:metadata=audio_metadata(project_dir(project.id),audio['asset_id'])
             except (ValueError,OSError):raise HTTPException(422,'Audio tidak ditemukan pada proyek ini.')
@@ -273,3 +281,10 @@ def serve_audio(id:str,asset_id:str,s:DBSession=Depends(session)):
     try:metadata=audio_metadata(project_dir(id),asset_id)
     except (ValueError,OSError):raise HTTPException(404,'Audio tidak ditemukan.')
     return FileResponse(project_dir(id)/'audio'/f'{str(UUID(asset_id))}.m4a',media_type='audio/mp4')
+
+@app.post('/api/projects/{id}/mix',status_code=202)
+def retry_mix(id:str,s:DBSession=Depends(session)):
+    p=get(s,Project,id)
+    prior=s.scalar(select(Job).where(Job.project_id==id,Job.kind.in_(['analysis','mix'])).order_by(Job.created_at.desc()))
+    payload=prior.payload if prior and prior.payload.get('visual_mode')=='mix' else {'gemini_model':p.gemini_model,'visual_mode':'mix','mix_hashtags':p.mix_hashtags,'library':library_snapshot(s,p.mix_hashtags)}
+    return enqueue(s,id,'mix',payload=payload)

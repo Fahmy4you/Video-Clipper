@@ -14,7 +14,7 @@ if configured:
     result=subprocess.run([str(PY),'-m','alembic','-c','backend/alembic.ini','upgrade','head'],env=env)
     if result.returncode: print('Migrasi belum berhasil. UI tetap dibuka untuk petunjuk setup.',flush=True)
     else:
-        subprocess.run([str(PY),'-c',"from app.db import Session,Job; from sqlalchemy import update; s=Session(); s.execute(update(Job).where(Job.status.in_(['running','queued'])).values(status='failed',stage='Terhenti',error='Launcher sebelumnya terhenti. Gunakan Coba lagi untuk melanjutkan.')); s.commit()"],env=env,check=True)
+        subprocess.run([str(PY),'-c',"from app.db import Session,Job,VideoClip; from sqlalchemy import update; s=Session(); s.execute(update(Job).where(Job.status.in_(['running','queued'])).values(status='failed',stage='Terhenti',error='Launcher sebelumnya terhenti. Gunakan Coba lagi untuk melanjutkan.')); s.execute(update(VideoClip).where(VideoClip.status.in_(['processing','queued'])).values(status='failed',error='Pemrosesan terhenti. Gunakan Coba lagi.')); s.commit()"],env=env,check=True)
 logs=ROOT/'storage/logs'; logs.mkdir(parents=True,exist_ok=True)
 redis=ROOT/'storage/redis'; redis.mkdir(exist_ok=True)
 children=[];handles=[]

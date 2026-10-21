@@ -61,6 +61,30 @@ class Transform(Strict):
     y:float=Field(default=.5,ge=0,le=1)
     scale:float=Field(default=1,ge=1,le=4)
     b:float=Field(default=.7,ge=0,le=1)
+class Fade(Strict):
+    in_frames:int=Field(default=0,ge=0)
+    out_frames:int=Field(default=0,ge=0)
+    span:int=Field(default=0,ge=0)
+    offset:int=Field(default=0,ge=0)
+class Transition(Strict):
+    kind:Literal['black','crossfade','none']='black'
+    frames:int=Field(default=9,ge=0,le=90)
+class Broll(Strict):
+    id:str=Field(max_length=100)
+    asset_id:str=Field(max_length=36)
+    start:int=Field(ge=0)
+    end:int=Field(gt=0)
+    source_in:int=Field(default=0,ge=0)
+    reason:str=Field(default='',max_length=2000)
+    transform:Transform=Field(default_factory=lambda:Transform(mode='fill'))
+    transition_in:Transition=Field(default_factory=Transition)
+    transition_out:Transition=Field(default_factory=Transition)
+    @model_validator(mode='after')
+    def valid(self):
+        from uuid import UUID
+        UUID(self.asset_id)
+        if self.end<=self.start:raise ValueError('Durasi sisipan tidak valid.')
+        return self
 class AudioItem(Strict):
     id:str=Field(max_length=100)
     asset_id:str=Field(max_length=36)
@@ -68,6 +92,7 @@ class AudioItem(Strict):
     end:int=Field(gt=0)
     source_in:int=Field(default=0,ge=0)
     volume:float=Field(default=.5,ge=0,le=1)
+    fade:Fade=Field(default_factory=Fade)
     @model_validator(mode='after')
     def valid(self):
         from uuid import UUID
@@ -82,10 +107,13 @@ class Segment(Strict):
     captions:list[Caption]=Field(default_factory=list,max_length=2000)
     overlays:list[Overlay]=Field(default_factory=list,max_length=100)
     audio:list[AudioItem]=Field(default_factory=list,max_length=50)
+    broll:list[Broll]=Field(default_factory=list,max_length=100)
     excluded_word_ids:list[str]=Field(default_factory=list,max_length=10000)
     @model_validator(mode='after')
     def bounds(self):
-        items=[*self.captions,*self.overlays,*self.audio]
+        items=[*self.captions,*self.overlays,*self.audio,*self.broll]
+        ordered=sorted(self.broll,key=lambda b:b.start)
+        if any(a.end>b.start for a,b in zip(ordered,ordered[1:])):raise ValueError("Sisipan tidak boleh tumpang tindih.")
         if any(x.end>self.duration for x in items):raise ValueError('Elemen melampaui potongan video.')
         ids=[x.id for x in items]
         if len(ids)!=len(set(ids)):raise ValueError('ID elemen harus unik.')
@@ -94,6 +122,7 @@ class EditPlanV2(Strict):
     version:Literal[2]=2
     fps:Literal[30]=30
     source_volume:float=Field(default=1,ge=0,le=1)
+    source_fade:Fade=Field(default_factory=Fade)
     segments:list[Segment]=Field(min_length=1,max_length=200)
     subtitle_style:VisualStyle=Field(default_factory=VisualStyle)
     @model_validator(mode='after')

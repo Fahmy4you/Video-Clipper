@@ -12,7 +12,8 @@ def test_analysis_limits_priorities_and_report(monkeypatch,tmp_path,count,prompt
     words=[{'start':i,'end':i+.7,'text':('Money management.' if i==92 else 'Konteks.')} for i in range(300)]
     (tmp_path/'transcript.json').write_text(json.dumps({'words':words}))
     project=SimpleNamespace()
-    session=MagicMock(); session.__enter__.return_value=session;session.get.return_value=project
+    session=MagicMock(); session.__enter__.return_value=session;session.get.side_effect=lambda model,_: job if model is tasks.Job else project
+    job=SimpleNamespace(payload={})
     session.scalars.return_value.all.return_value=[]
     monkeypatch.setattr(tasks,'Session',MagicMock(return_value=session))
     monkeypatch.setattr(tasks,'probe',lambda _: {'streams':[{'codec_type':'audio'}],'format':{'duration':'300'}})
@@ -28,6 +29,7 @@ def test_analysis_limits_priorities_and_report(monkeypatch,tmp_path,count,prompt
     assert len(saved)==count
     assert all(c.plan['segments'][0]['transform']['mode']=='fill' for c in saved)
     assert project.analysis_report['generated']==count
+    assert len(job.payload['mix_target_ids'])==count
     request=client.models.generate_content.call_args.kwargs
     assert request['model']=='gemini-test' and f'maksimal {count}' in request['contents']
     assert prompt in request['contents']
