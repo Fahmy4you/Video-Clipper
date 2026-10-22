@@ -16,4 +16,4 @@ Hashtags=Annotated[list[str],Field(max_length=30),AfterValidator(normalize_tags)
 
 def filter_library(library,tags):
     wanted=set(tags)
-    return [a for a in library if not wanted or wanted.intersection(a.get('hashtags',[]))]
+    return [a for a in library if not wanted or wanted.issubset(a.get('hashtags',[]))]

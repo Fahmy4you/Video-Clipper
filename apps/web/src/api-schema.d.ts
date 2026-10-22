@@ -32,8 +32,8 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Archive */
-        delete: operations["archive_api_video_clips__aid__delete"];
+        /** Remove */
+        delete: operations["remove_api_video_clips__aid__delete"];
         options?: never;
         head?: never;
         /** Edit */
@@ -173,7 +173,8 @@ export interface paths {
         get: operations["project_api_projects__id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** Delete Project */
+        delete: operations["delete_project_api_projects__id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1249,7 +1250,7 @@ export interface operations {
             };
         };
     };
-    archive_api_video_clips__aid__delete: {
+    remove_api_video_clips__aid__delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -1619,6 +1620,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_project_api_projects__id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

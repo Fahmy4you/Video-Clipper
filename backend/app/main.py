@@ -19,7 +19,7 @@ from .model_catalog import available_models, validate_model
 
 app=FastAPI(title='Video Clipping API',version='0.1.0')
 from .hashtag_api import router as hashtag_router
-from .video_library import router as library_router,snapshot as library_snapshot,folder as library_folder
+from .video_library import router as library_router,snapshot as library_snapshot,folder as library_folder,lock_plan_assets,live_job_payload
 app.include_router(library_router)
 app.include_router(hashtag_router)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=['localhost','127.0.0.1','testserver'])
@@ -61,6 +61,35 @@ def projects(s:DBSession=Depends(session)):
 def create_project(body:ProjectInput,s:DBSession=Depends(session)):
     validate_model(body.gemini_model)
     p=Project(**body.model_dump()); s.add(p); s.commit(); return serialize(p)
+@app.delete('/api/projects/{id}')
+def delete_project(id:str,s:DBSession=Depends(session)):
+    from uuid import uuid4
+    from .config import STORAGE
+    p=s.scalar(select(Project).where(Project.id==id).with_for_update())
+    if p is None:raise HTTPException(404,'Proyek tidak ditemukan.')
+    if s.scalar(select(Job.id).where(Job.project_id==id,Job.status.in_(['queued','running']))):
+        raise HTTPException(409,'Tunggu pekerjaan proyek selesai atau batalkan sebelum menghapus proyek.')
+    try:canonical=str(UUID(id))
+    except ValueError:raise HTTPException(409,'Lokasi proyek tidak valid.')
+    parent=(STORAGE/'projects').resolve();folder=parent/canonical
+    if folder.is_symlink() or folder.resolve().parent!=parent:raise HTTPException(409,'Lokasi proyek tidak valid.')
+    clip_ids=list(s.scalars(select(Clip.id).where(Clip.project_id==id)))
+    trash=parent/('.delete-'+canonical+'-'+str(uuid4()));moved=False
+    try:
+        if folder.exists():folder.rename(trash);moved=True
+        s.execute(delete(Job).where(Job.project_id==id))
+        s.execute(delete(Clip).where(Clip.project_id==id))
+        s.delete(p);s.commit()
+    except Exception:
+        s.rollback()
+        if moved:trash.rename(folder)
+        raise
+    cleanup_pending=False
+    if moved:
+        try:shutil.rmtree(trash)
+        except OSError:cleanup_pending=True
+    return {'deleted':id,'clip_ids':clip_ids,'cleanup_pending':cleanup_pending}
+
 @app.get('/api/projects/{id}',response_model=ProjectView)
 def project(id:str,s:DBSession=Depends(session)): return serialize(get(s,Project,id))
 @app.patch('/api/projects/{id}/model',response_model=ProjectView)
@@ -84,7 +113,7 @@ def enqueue(s,pid,kind,clip=None,payload=None):
     s.execute(select(Project).where(Project.id==pid).with_for_update()).scalar_one()
     active=s.scalar(select(Job).where(Job.project_id==pid,Job.status.in_(['queued','running'])))
     if active: raise HTTPException(409,'Proyek ini masih memiliki pekerjaan aktif.')
-    j=Job(project_id=pid,kind=kind,clip_id=clip,payload=payload or {})
+    j=Job(project_id=pid,kind=kind,clip_id=clip,payload=live_job_payload(s,payload))
     s.add(j); s.commit()
     try: execute.apply_async(args=[j.id],task_id=j.id,retry=False)
     except Exception:
@@ -118,6 +147,7 @@ def validate_plan(plan,project):
 @app.post('/api/projects/{id}/clips',status_code=201,response_model=ClipView)
 def manual_clip(id:str,body:ClipInput,s:DBSession=Depends(session)):
     p=get(s,Project,id)
+    lock_plan_assets(s,body.plan.model_dump())
     validate_plan(body.plan,p)
     c=Clip(project_id=id,title=body.title,plan=upgrade_plan(body.plan.model_dump())); s.add(c); s.commit(); return serialize(c)
 @app.patch('/api/clips/{id}',response_model=ClipView)
@@ -126,6 +156,7 @@ def save_clip(id:str,body:ClipUpdate,s:DBSession=Depends(session)):
     if c is None: raise HTTPException(404,'Clip tidak ditemukan.')
     if c.revision!=body.revision: raise HTTPException(409,'Clip sudah berubah. Muat ulang sebelum menyimpan.')
     p=get(s,Project,c.project_id)
+    lock_plan_assets(s,body.plan.model_dump())
     validate_plan(body.plan,p)
     c.title=body.title; c.plan=upgrade_plan(body.plan.model_dump()); c.revision+=1; s.commit(); return serialize(c)
 @app.post('/api/clips/{id}/preview',status_code=202)

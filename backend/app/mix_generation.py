@@ -39,6 +39,9 @@ def generate_mix(jid,pid,payload,check):
         plan=upgrade_plan(rawplan)
         with Session() as s:
             job=s.get(Job,jid);cached=job.payload.get('mix_results',{}).get(cid)
+        # Older retry caches may have been created with OR filtering.
+        allowed={asset['id'] for asset in library}
+        if cached and any(item['asset_id'] not in allowed for segment in cached.get('segments',[]) for item in segment.get('broll',[])):cached=None
         if cached is None:
             words=[];offset=0
             for seg in plan['segments']:

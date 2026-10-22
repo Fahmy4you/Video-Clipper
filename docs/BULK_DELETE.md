@@ -1,0 +1,16 @@
+# Pilih dan hapus banyak data
+
+Mode select pada Proyek, daftar Highlight, Hashtag, dan Koleksi video awalnya tidak aktif. Klik tombol ikon Lucide square-mouse-pointer di kiri atas, di sebelah tombol tambah/unggah, untuk menampilkan checkbox dan toolbar pilihan. Ikon berubah menjadi square-dashed-x; klik untuk keluar dan mengosongkan semua pilihan. Pilih semua hanya memilih data yang terlihat pada halaman saat ini (proyek aktif dikecualikan). Pilihan tetap ada saat berpindah halaman atau mencari; jumlah pilihan di luar halaman ditampilkan. Batal pilih membersihkan seluruh pilihan.
+
+Hapus terpilih meminta satu konfirmasi, lalu menghapus bertahap melalui endpoint yang ada. Data yang berhasil dihapus dilepas dari pilihan; kegagalan tetap terpilih dan pesan hasil menyebutkan jumlah berhasil/gagal. Data yang sudah dihapus di tempat lain (404) dianggap selesai.
+
+- Proyek: endpoint DELETE /api/projects/{id} menghapus jobs, highlight, dan folder media proyek. Proyek dengan job aktif ditolak 409. Folder dikarantina dengan rename sebelum commit dan dipulihkan jika transaksi gagal. Koleksi bersama tetap utuh. Draft lokal highlight terkait dibersihkan setelah berhasil.
+- Highlight: penghapusan dan pembersihan media tetap melalui DELETE /api/clips/{id}; proyek aktif dilindungi.
+- Hashtag: penghapusan label beserta relasi, tanpa menghapus video.
+- Koleksi: menghapus permanen row video_clip, adegan, pivot hashtag, serta seluruh folder sumber/proxy/thumbnail. Hashtag bersama tetap ada. Video yang masih dipakai highlight (termasuk plan pemulihan), pekerjaan aktif, atau sedang diproses ditolak 409 dengan alasan. Folder dikarantina sebelum commit dan dipulihkan jika transaksi gagal; kegagalan pembersihan berkas dilaporkan. Save/enqueue mengunci referensi sumber agar tidak berlomba dengan penghapusan. Retry memakai kandidat snapshot yang masih ada dan menghitung ulang cache Mix yang merujuk sumber yang dihapus.
+
+Halaman highlight sekarang membedakan initial loading, kegagalan mengambil data, dan hasil kosong. Saat loading/gagal tidak memasang ModelSelect atau formulir retry. Hasil highlight yang ada tidak dianggap belum dianalisis hanya karena riwayat job tidak tersedia. Polling baru dimulai setelah permintaan awal selesai; respons route lama diabaikan. Membuka proyek tidak mengirim permintaan generate analisis.
+
+Verifikasi: 100 tes backend lulus, frontend build dan OpenAPI lulus. Browser menguji empat halaman, seleksi lintas pagination, kegagalan sebagian, loading lambat/gagal tanpa request models/analysis, dan viewport mobile. Penghapusan nyata dilakukan terhadap dua proyek QA dan tiga highlight QA; database serta file QA dibersihkan dan semua proyek/revisi highlight pengguna dipertahankan.
+
+Verifikasi penghapusan permanen koleksi (2026-10-22): 121 tes backend lulus; build frontend dan tipe OpenAPI lulus. Pengujian PostgreSQL/API dengan fixture terpisah memverifikasi penolakan sumber yang dipakai highlight/job, penghapusan row/pivot/folder, serta pemeliharaan hashtag bersama. Sembilan arsip lama yang sudah dihapus pengguna dan tidak direferensikan telah dibersihkan; dua video aktif, satu proyek, tiga highlight, dan 37 hashtag dipertahankan. Browser memeriksa konfirmasi hapus permanen, pembatalan, serta regresi select/bulk delete desktop dan mobile tanpa error JavaScript.

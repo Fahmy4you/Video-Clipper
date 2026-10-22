@@ -102,3 +102,30 @@ def test_automatic_ranges_respect_curated_scenes():
     assert not validate_suggestions(plan(),[candidate],assets)['segments'][0]['broll']
     candidate['source_in']=330
     assert validate_suggestions(plan(),[candidate],assets)['segments'][0]['broll'][0]['source_in']==330
+
+
+def test_retry_discards_old_or_cache_when_and_filter_has_no_match(monkeypatch):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from app.db import Base,Project,Clip,Job
+    from app import mix_generation
+    engine=create_engine('sqlite://');Base.metadata.create_all(engine)
+    factory=sessionmaker(bind=engine,expire_on_commit=False)
+    monkeypatch.setattr(mix_generation,'Session',factory)
+    # No Gemini call is allowed when every snapshot candidate fails the AND filter.
+    from google import genai
+    def forbidden(*args,**kwargs):raise AssertionError('Unfiltered fallback attempted')
+    monkeypatch.setattr(genai,'Client',forbidden)
+    with factory() as db:
+        p=Project(url='https://youtu.be/test',visual_mode='mix');db.add(p);db.flush()
+        c=Clip(project_id=p.id,title='Test',plan=plan());db.add(c);db.flush()
+        aid=str(uuid4());old=validate_suggestions(plan(),[{'asset_id':aid,'start':90,'end':180,'source_in':0,'reason':'Old OR match'}],[{'id':aid,'frames':300}])
+        payload={'library':[{'id':aid,'frames':300,'hashtags':['fory']}],'mix_hashtags':['fory','asek'],'mix_target_ids':[c.id],'mix_results':{c.id:old}}
+        job=Job(project_id=p.id,kind='mix',payload=payload);db.add(job);db.commit();pid,cid,jid=p.id,c.id,job.id
+    mix_generation.generate_mix(jid,pid,payload,lambda:None)
+    with factory() as db:
+        saved=db.get(Clip,cid)
+        assert saved.revision==2 and not saved.plan['segments'][0]['broll']
+        assert not db.get(Job,jid).payload['mix_results'][cid]['segments'][0]['broll']
+        assert db.get(Project,pid).analysis_report['mix_status']=='ready'
+    engine.dispose()

@@ -1,5 +1,5 @@
-"""Shared, versioned footage library. Archived sources remain renderable."""
-import json,math
+"""Shared footage library with permanent, reference-checked deletion."""
+import json,math,shutil
 from pathlib import Path
 from uuid import UUID,uuid4
 from fastapi import APIRouter,Depends,File,UploadFile,Form,HTTPException
@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel,Field,ConfigDict,model_validator
 from sqlalchemy import select
 from .hashtags import Hashtags,filter_library
-from .db import Session,session,VideoClip,Hashtag
+from .db import Session,session,VideoClip,Hashtag,Clip,Job
 from .config import STORAGE,settings
 from .media import run,probe,write_json
 router=APIRouter(prefix='/api/video-clips')
@@ -69,9 +69,59 @@ def edit(aid:str,body:Metadata,s=Depends(session)):
     v.tag_records=tags
     for k,value in body.model_dump(exclude={'revision','hashtags','hashtag_ids'}).items():setattr(v,k,value)
     v.revision+=1;s.commit();return info(v)
+def plan_asset_ids(plan):
+    return {item['asset_id'] for segment in (plan or {}).get('segments',[])
+            for item in segment.get('broll',[]) if item.get('asset_id')}
+
+def lock_plan_assets(s,plan):
+    # Saves/enqueues share-lock sources until commit. Deletion takes the exclusive
+    # lock before inspecting references, so a concurrent edit cannot save a dead ID.
+    wanted=plan_asset_ids(plan)
+    if not wanted:return
+    found=set(s.scalars(select(VideoClip.id).where(VideoClip.id.in_(wanted)).order_by(VideoClip.id).with_for_update(read=True)))
+    if found!=wanted:raise HTTPException(409,'Video sisipan sudah dihapus. Muat ulang koleksi lalu ganti atau hapus sisipan yang tidak tersedia.')
+
+def live_job_payload(s,payload):
+    payload=dict(payload or {})
+    lock_plan_assets(s,payload.get('plan'))
+    if 'library' in payload:
+        wanted={item['id'] for item in payload['library']}
+        existing=set(s.scalars(select(VideoClip.id).where(VideoClip.id.in_(wanted)).order_by(VideoClip.id).with_for_update(read=True))) if wanted else set()
+        payload['library']=[item for item in payload['library'] if item['id'] in existing]
+        # Old retry caches can contain a previously selected, now deleted source.
+        # Recompute those suggestions using only the surviving snapshot candidates.
+        payload['mix_results']={cid:plan for cid,plan in payload.get('mix_results',{}).items() if plan_asset_ids(plan)<=existing}
+    return payload
+
 @router.delete('/{aid}')
-def archive(aid:str,s=Depends(session)):
-    v=lookup(s,aid);v.archived=True;v.revision+=1;s.commit();return {'archived':aid}
+def remove(aid:str,s=Depends(session)):
+    v=s.scalar(select(VideoClip).where(VideoClip.id==aid).with_for_update())
+    if v is None:raise HTTPException(404,'Video koleksi tidak ditemukan.')
+    if v.status in ('queued','processing'):raise HTTPException(409,'Video masih diproses. Tunggu proses selesai sebelum menghapusnya.')
+    references=[title for title,plan,legacy in s.execute(select(Clip.title,Clip.plan,Clip.legacy_plan)) if aid in plan_asset_ids(plan)|plan_asset_ids(legacy)]
+    if references:raise HTTPException(409,f'Video masih dipakai oleh {len(references)} highlight, termasuk “{references[0][:100]}”. Ganti atau hapus video sisipan tersebut di studio sebelum menghapus video koleksi.')
+    for payload in s.scalars(select(Job.payload).where(Job.status.in_(['queued','running']))):
+        if aid in plan_asset_ids(payload.get('plan')) or any(item.get('id')==aid for item in payload.get('library',[])) or any(aid in plan_asset_ids(plan) for plan in payload.get('mix_results',{}).values()):
+            raise HTTPException(409,'Video masih dipakai pekerjaan aktif. Tunggu pekerjaan selesai atau batalkan sebelum menghapusnya.')
+    try:canonical=str(UUID(aid))
+    except ValueError:raise HTTPException(409,'Lokasi video koleksi tidak valid.')
+    parent=STORAGE/'video-clips'
+    if parent.is_symlink():raise HTTPException(409,'Lokasi koleksi tidak valid.')
+    parent=parent.resolve();root=parent/canonical
+    if root.is_symlink() or root.resolve().parent!=parent or (root.exists() and not root.is_dir()):raise HTTPException(409,'Lokasi video koleksi tidak valid.')
+    trash=parent/('.delete-'+canonical+'-'+str(uuid4()));moved=False
+    try:
+        if root.exists():root.rename(trash);moved=True
+        s.delete(v);s.commit()
+    except Exception:
+        s.rollback()
+        if moved:trash.rename(root)
+        raise
+    cleanup_pending=False
+    if moved:
+        try:shutil.rmtree(trash)
+        except OSError:cleanup_pending=True
+    return {'deleted':aid,'cleanup_pending':cleanup_pending}
 @router.post('/{aid}/retry',status_code=202)
 def retry(aid:str,s=Depends(session)):
     v=lookup(s,aid)

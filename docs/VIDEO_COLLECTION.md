@@ -18,7 +18,7 @@ Semua 11 sumber tetap di folder asal, hanya diganti nama. Salinan proyek diverif
 | revision | Mencegah penyimpanan menimpa revisi lain. |
 | created_at | Waktu ditambahkan. |
 
-Kolom type telah diganti hashtags. Filter dengan beberapa hashtag memakai kecocokan minimal satu (OR). Tanpa pilihan berarti semua footage siap pakai. Jika tidak ada kecocokan, tidak mengambil footage di luar filter. Audio sisipan tetap mute.
+Kolom type telah diganti hashtags. Filter dengan beberapa hashtag memakai kecocokan semua hashtag terpilih (AND). Tanpa pilihan berarti semua footage siap pakai. Jika tidak ada kecocokan, tidak mengambil footage di luar filter. Audio sisipan tetap mute.
 
 ## Hasil peninjauan
 

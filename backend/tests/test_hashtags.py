@@ -11,11 +11,15 @@ def test_normalize_and_dedupe():
 def test_api_rejects_invalid_tags(tags):
     with pytest.raises(ValidationError):Metadata(title='Test',hashtags=tags,revision=1)
 
-def test_optional_or_filter_never_falls_back():
-    assets=[{'id':'a','hashtags':['luxury','mobil']},{'id':'b','hashtags':['industri']},{'id':'c','hashtags':[]}]
+def test_optional_and_filter_never_falls_back():
+    assets=[{'id':'a','hashtags':['fory','asek','luxury']},{'id':'b','hashtags':['fory']},{'id':'c','hashtags':['asek']},{'id':'d','hashtags':[]}]
     assert filter_library(assets,[])==assets
-    assert [a['id'] for a in filter_library(assets,['luxury','industri'])]==['a','b']
-    assert filter_library(assets,['absent'])==[]
+    assert [a['id'] for a in filter_library(assets,['fory'])]==['a','b']
+    assert [a['id'] for a in filter_library(assets,['fory','asek'])]==['a']
+    assert [a['id'] for a in filter_library(assets,['fory','asek','luxury'])]==['a']
+    assert filter_library(assets,['fory','asek','absent'])==[]
+    assert filter_library([{'id':'missing_tags'}],['fory'])==[]
+    assert [a['id'] for a in filter_library(assets,['fory','fory','asek'])]==['a']
 
 def test_project_tags_canonical_and_default():
     args=dict(url='https://youtu.be/K-iDtHzEzu8',gemini_model='gemini-test')

@@ -52,3 +52,17 @@ def test_detach_only_changes_one_video(db):
     edit(a.id,Metadata(title='A',revision=a.revision,hashtag_ids=[]),db);db.expire_all()
     assert a.hashtags==[] and b.hashtags==['mobil']
     assert db.get(Hashtag,t.id) is not None
+
+
+def test_snapshot_requires_every_selected_tag(db):
+    fory=Hashtag(name_tag='fory');asek=Hashtag(name_tag='asek')
+    a=VideoClip(title='Both',status='ready',tag_records=[fory,asek])
+    b=VideoClip(title='Only fory',status='ready',tag_records=[fory])
+    c=VideoClip(title='Only asek',status='ready',tag_records=[asek])
+    d=VideoClip(title='No tags',status='ready')
+    e=VideoClip(title='Not ready',status='queued',tag_records=[fory,asek])
+    db.add_all([a,b,c,d,e]);db.commit()
+    assert {x['id'] for x in snapshot(db,[])}=={a.id,b.id,c.id,d.id}
+    assert {x['id'] for x in snapshot(db,['fory'])}=={a.id,b.id}
+    assert [x['id'] for x in snapshot(db,['fory','asek'])]==[a.id]
+    assert snapshot(db,['fory','asek','absent'])==[]
