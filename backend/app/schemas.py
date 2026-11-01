@@ -23,12 +23,66 @@ def youtube_url(value: str) -> str:
 class ModelSelection(BaseModel):
     model_config = {'extra':'forbid'}
     gemini_model: str = Field(min_length=1, max_length=200, pattern=r'^gemini-[A-Za-z0-9._-]+$')
+class ConnectionCooldown(BaseModel):
+    model:str
+    status:str
+    next_attempt_at:str|None=None
+class GeminiConnectionView(BaseModel):
+    masked_key:str="••••••••"
+    id:str
+    label:str
+    priority:int
+    status:str
+    models:list[str]
+    used_models:list[str]=Field(default_factory=list)
+    catalog_refreshing:bool=False
+    catalog_error:str|None=None
+    catalog_fetched_at:str|None=None
+    cooldowns:list[ConnectionCooldown]
+
+class ModelConnectionStatus(BaseModel):
+    id:str
+    label:str
+    status:str
+    next_attempt_at:str|None=None
 class ModelOption(BaseModel):
-    id: str
-    name: str
+    id:str
+    name:str
+    status:str='catalog'
+    selectable:bool=True
+    stale:bool=False
+    connections:list[ModelConnectionStatus]=Field(default_factory=list)
+class CatalogConnection(BaseModel):
+    id:str
+    label:str
+    refreshing:bool
+    stale:bool
+    fetched_at:str|None=None
+    next_attempt_at:str|None=None
+    error:str|None=None
+    model_count:int
+class ModelCatalog(BaseModel):
+    models:list[ModelOption]
+    connections:list[CatalogConnection]
+    refreshing:bool
+    stale:bool
+class CatalogRefresh(BaseModel):
+    connection_id:str|None=None
+from uuid import UUID
 class ProjectInput(ModelSelection):
+    enqueue_analysis:bool=False
+    request_id:UUID|None=None
+    instansi_ids:list[UUID]=Field(default_factory=list,max_length=100)
+    include_global:bool=True
+    @model_validator(mode='after')
+    def source_policy(self):
+        self.instansi_ids=list(dict.fromkeys(self.instansi_ids))
+        if not self.instansi_ids:self.include_global=True
+        return self
     mix_hashtags: Hashtags = Field(default_factory=list)
     visual_mode: Literal['podcast','mix'] = 'podcast'
+    subtitle_mode: Literal['sentence','word'] = 'sentence'
+    subtitle_animation: Literal['none','soft_zoom'] = 'none'
     aspect_ratio: Ratio = '9:16'
     highlight_count: int = Field(default=3,ge=1,le=5)
     additional_prompt: str = Field(default='',max_length=4000)
@@ -90,8 +144,12 @@ class Highlights(BaseModel):
 from datetime import datetime
 from pydantic import ConfigDict
 class ProjectView(BaseModel):
+    instansi_ids:list[str]=Field(default_factory=list)
+    include_global:bool=True
     mix_hashtags: Hashtags = Field(default_factory=list)
     visual_mode: Literal['podcast','mix'] = 'podcast'
+    subtitle_mode: Literal['sentence','word'] = 'sentence'
+    subtitle_animation: Literal['none','soft_zoom'] = 'none'
     aspect_ratio: Ratio
     highlight_count: int
     additional_prompt: str
@@ -103,6 +161,7 @@ class ProjectView(BaseModel):
     duration: float
     status: str
     created_at: datetime
+    updated_at: datetime
 class ClipView(BaseModel):
     fulfills_prompt: bool = False
     id: str
@@ -112,8 +171,15 @@ class ClipView(BaseModel):
     revision: int
     plan: EditPlanV2 | EditPlan
 class JobView(BaseModel):
+    heartbeat_at:datetime|None=None
+    telemetry:dict=Field(default_factory=dict)
+    queue_at:datetime
+    next_attempt_at:datetime|None=None
+    queue_position:int|None=None
+    wait_reason:str|None=None
+    connection_label:str|None=None
     id: str
-    project_id: str
+    project_id: str|None
     clip_id: str | None
     kind: str
     status: str

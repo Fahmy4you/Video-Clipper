@@ -19,7 +19,9 @@ def write_json(path, data):
 def run(args, check=lambda:None):
     import tempfile
     with tempfile.TemporaryFile() as log:
-        proc = subprocess.Popen(args, stdout=log, stderr=log)
+        import os
+        fd=os.environ.get('VC_HEAVY_LOCK_FD')
+        proc = subprocess.Popen(args, stdout=log, stderr=log,pass_fds=(int(fd),) if fd else ())
         try:
             while proc.poll() is None:
                 check()

@@ -1,27 +1,42 @@
+from pydantic import BaseModel,Field
 import json
 import shutil
 from pathlib import Path
 from uuid import UUID
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.exceptions import RequestValidationError
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from sqlalchemy import select, text, delete
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session as DBSession
 from .config import settings
-from .db import session, engine, Project, Clip, Job
-from .schemas import ProjectInput, ClipInput, ClipUpdate, ProjectView, ClipView, JobView, ModelSelection, ModelOption
+from .db import session, engine, Project, Clip, Job, Session
+from .schemas import ProjectInput, ClipInput, ClipUpdate, ProjectView, ClipView, JobView, ModelSelection, ModelOption, GeminiConnectionView, ModelCatalog, CatalogRefresh
 from .media import project_dir
 from .tasks import execute, celery
 from .timeline import upgrade_plan, EditPlanV2
 from .audio_assets import AudioImport,MAX_BYTES,audio_metadata
 from .model_catalog import available_models, validate_model
+from .queue_runtime import PENDING,WAITING,public_job,wake,eligible
+from .gemini_connections import connections,public_connections,clear_expired_for_manual
 
 app=FastAPI(title='Video Clipping API',version='0.1.0')
+@app.exception_handler(RequestValidationError)
+async def sanitized_validation(request,exc):
+    return JSONResponse(status_code=422,content={'detail':[{'loc':list(e['loc']),'msg':e['msg'],'type':e['type']} for e in exc.errors()]})
 from .hashtag_api import router as hashtag_router
 from .video_library import router as library_router,snapshot as library_snapshot,folder as library_folder,lock_plan_assets,live_job_payload
+from .instansi_api import router as instansi_router,resolve_instansi
+app.include_router(instansi_router)
 app.include_router(library_router)
 app.include_router(hashtag_router)
+from .gemini_config_api import router as gemini_config_router
+from .key_store import KeyConfigError
+app.include_router(gemini_config_router)
+@app.exception_handler(KeyConfigError)
+async def key_config_error(request,exc):
+    return JSONResponse(status_code=503,content={'detail':str(exc),'code':'key_config_invalid'})
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=['localhost','127.0.0.1','testserver'])
 @app.middleware('http')
 async def local_origin(request, call_next):
@@ -37,7 +52,13 @@ def get(s,model,id):
     item=s.get(model,id)
     if item is None: raise HTTPException(404,'Data tidak ditemukan.')
     return item
-def serialize(obj): return {c.name:getattr(obj,c.name) for c in obj.__table__.columns}
+def serialize(obj):
+    if isinstance(obj,Job):
+        from sqlalchemy.orm import object_session
+        return public_job(object_session(obj),obj)
+    data={c.name:getattr(obj,c.name) for c in obj.__table__.columns if c.name not in ('request_id','request_hash')}
+    if isinstance(obj,Project):data['instansi_ids']=obj.instansi_ids
+    return data
 @app.get('/api/health')
 def health():
     database='not_configured'
@@ -50,24 +71,70 @@ def health():
         import redis
         redis.Redis.from_url(settings.redis_url,socket_connect_timeout=1,socket_timeout=1).ping(); queue=True
     except Exception: queue=False
-    return {'database':database,'redis':queue,'ffmpeg':bool(shutil.which('ffmpeg')),'gemini':bool(settings.gemini_api_key)}
+    from .job_diagnostics import worker_health
+    try:gemini_ready=bool(connections());gemini_error=None
+    except KeyConfigError as e:gemini_ready=False;gemini_error=str(e)
+    return {'worker':worker_health(),'gemini_error':gemini_error,'database':database,'redis':queue,'ffmpeg':bool(shutil.which('ffmpeg')),'gemini':gemini_ready}
+@app.get('/api/model-catalog',response_model=ModelCatalog)
+def model_catalog_snapshot():
+    from .model_catalog import snapshot
+    return snapshot()
+
+@app.post('/api/model-catalog/refresh',status_code=202,response_model=ModelCatalog)
+def refresh_model_catalog(body:CatalogRefresh|None=None):
+    from .model_catalog import schedule,snapshot
+    c=None
+    if body and body.connection_id:
+        c=next((c for c in connections() if c.config_id==body.connection_id),None)
+        if c is None:raise HTTPException(404,'Koneksi tidak ditemukan.')
+    schedule(c,force=True)
+    return snapshot(update=False)
+
 @app.get('/api/models',response_model=list[ModelOption])
 def models(refresh:bool=False):
     return available_models(refresh)
+@app.get('/api/gemini-connections',response_model=list[GeminiConnectionView])
+def gemini_connections():return public_connections()
+
+@app.get('/api/queue')
+def queue_summary(s:DBSession=Depends(session)):
+    rows=list(s.scalars(select(Job).where(Job.status.in_(PENDING)).order_by(Job.queue_at,Job.id)))
+    brief=lambda j:{k:v for k,v in public_job(s,j).items() if k not in ('payload','result')}
+    from .job_diagnostics import worker_health
+    return {'worker':worker_health(),'active':next((brief(j) for j in rows if j.status in ('running','cancelling')),None),'waiting':[brief(j) for j in rows if j.status not in ('running','cancelling')]}
+
 @app.get('/api/projects',response_model=list[ProjectView])
 def projects(s:DBSession=Depends(session)):
     return [serialize(x) for x in s.scalars(select(Project).order_by(Project.created_at.desc()))]
 @app.post('/api/projects',status_code=201,response_model=ProjectView)
 def create_project(body:ProjectInput,s:DBSession=Depends(session)):
+    import hashlib
+    request_id=str(body.request_id) if body.request_id else None
+    fingerprint=hashlib.sha256(body.model_dump_json(exclude={'request_id'}).encode()).hexdigest()
+    if request_id:
+        # Serialize identical submissions before checking the unique key.
+        if s.bind.dialect.name=='postgresql':s.execute(text('SELECT pg_advisory_xact_lock(:lock)'),{'lock':int(hashlib.sha256(request_id.encode()).hexdigest()[:15],16)})
+        existing=s.scalar(select(Project).where(Project.request_id==request_id))
+        if existing:
+            if existing.request_hash!=fingerprint:raise HTTPException(409,'ID permintaan sudah dipakai dengan isi berbeda.')
+            return serialize(existing)
     validate_model(body.gemini_model)
-    p=Project(**body.model_dump()); s.add(p); s.commit(); return serialize(p)
+    owners=resolve_instansi(s,body.instansi_ids)
+    values=body.model_dump(exclude={'instansi_ids','enqueue_analysis','request_id'})
+    if body.visual_mode=='podcast':values.update(mix_hashtags=[],include_global=True);owners=[]
+    p=Project(**values,instansi_records=owners,request_id=request_id,request_hash=fingerprint if request_id else None)
+    s.add(p);s.flush()
+    if body.enqueue_analysis:add_job(s,p.id,'analysis',payload=analysis_payload(s,p))
+    s.commit()
+    if body.enqueue_analysis:wake()
+    return serialize(p)
 @app.delete('/api/projects/{id}')
 def delete_project(id:str,s:DBSession=Depends(session)):
     from uuid import uuid4
     from .config import STORAGE
     p=s.scalar(select(Project).where(Project.id==id).with_for_update())
     if p is None:raise HTTPException(404,'Proyek tidak ditemukan.')
-    if s.scalar(select(Job.id).where(Job.project_id==id,Job.status.in_(['queued','running']))):
+    if s.scalar(select(Job.id).where(Job.project_id==id,Job.status.in_(PENDING))):
         raise HTTPException(409,'Tunggu pekerjaan proyek selesai atau batalkan sebelum menghapus proyek.')
     try:canonical=str(UUID(id))
     except ValueError:raise HTTPException(409,'Lokasi proyek tidak valid.')
@@ -107,25 +174,34 @@ def transcript(id:str,s:DBSession=Depends(session)):
     return json.loads(f.read_text()) if f.exists() else {'words':[]}
 @app.get('/api/projects/{id}/jobs',response_model=list[JobView])
 def jobs(id:str,s:DBSession=Depends(session)):
-    return [serialize(x) for x in s.scalars(select(Job).where(Job.project_id==id).order_by(Job.created_at.desc()))]
-def enqueue(s,pid,kind,clip=None,payload=None):
-    # Serialize competing enqueue requests for the same project.
+    return [public_job(s,x) for x in s.scalars(select(Job).where(Job.project_id==id).order_by(Job.created_at.desc()))]
+def add_job(s,pid,kind,clip=None,payload=None,checkpoint=None):
     s.execute(select(Project).where(Project.id==pid).with_for_update()).scalar_one()
-    active=s.scalar(select(Job).where(Job.project_id==pid,Job.status.in_(['queued','running'])))
-    if active: raise HTTPException(409,'Proyek ini masih memiliki pekerjaan aktif.')
-    j=Job(project_id=pid,kind=kind,clip_id=clip,payload=live_job_payload(s,payload))
-    s.add(j); s.commit()
-    try: execute.apply_async(args=[j.id],task_id=j.id,retry=False)
-    except Exception:
-        j.status='failed'; j.error='Antrean tidak tersedia. Jalankan Redis dan worker.'; s.commit()
-        raise HTTPException(503,j.error)
-    return serialize(j)
+    active=list(s.scalars(select(Job).where(Job.project_id==pid,Job.status.in_(PENDING))))
+    if kind in ('analysis','mix') and any(j.kind in ('analysis','mix') for j in active):
+        raise HTTPException(409,'Pembuatan highlight atau Mix proyek ini masih aktif atau menunggu.')
+    snapshot=live_job_payload(s,{**(payload or {}),'project_id':pid})
+    for j in active:
+        if j.kind==kind and j.clip_id==clip and (kind=='editor_media' or j.payload==snapshot):return j
+    if kind=='analysis':
+        from .transcription import allow_manual_retry
+        from .config import STORAGE
+        allow_manual_retry(STORAGE/'projects'/pid)
+    j=Job(project_id=pid,kind=kind,clip_id=clip,payload=snapshot,checkpoint=checkpoint or {})
+    s.add(j);s.flush();return j
+
+def enqueue(s,pid,kind,clip=None,payload=None,checkpoint=None):
+    j=add_job(s,pid,kind,clip,payload,checkpoint);s.commit();wake();return public_job(s,j)
+
+def analysis_payload(s,p):
+    return {'subtitle_mode':p.subtitle_mode,'subtitle_animation':p.subtitle_animation,'gemini_model':p.gemini_model,'aspect_ratio':p.aspect_ratio,'highlight_count':p.highlight_count,'additional_prompt':p.additional_prompt,'visual_mode':p.visual_mode,'mix_hashtags':p.mix_hashtags,'source_policy_version':1,'instansi_ids':p.instansi_ids,'include_global':p.include_global,'library':library_snapshot(s,p.mix_hashtags,p.instansi_ids,p.include_global) if p.visual_mode=='mix' else []}
+
 @app.post('/api/projects/{id}/analysis',status_code=202)
 def analysis(id:str,s:DBSession=Depends(session)):
     p=get(s,Project,id)
     if not p.gemini_model: raise HTTPException(422,'Pilih model Gemini untuk proyek ini terlebih dahulu.')
     validate_model(p.gemini_model)
-    return enqueue(s,id,'analysis',payload={'gemini_model':p.gemini_model,'aspect_ratio':p.aspect_ratio,'highlight_count':p.highlight_count,'additional_prompt':p.additional_prompt,'visual_mode':p.visual_mode,'mix_hashtags':p.mix_hashtags,'library':library_snapshot(s,p.mix_hashtags) if p.visual_mode=='mix' else []})
+    return enqueue(s,id,'analysis',payload=analysis_payload(s,p))
 def validate_plan(plan,project):
     v2=upgrade_plan(plan.model_dump())
     if any(x['source_in']+x['duration']>round(project.duration*30) for x in v2['segments']):raise HTTPException(422,'Clip melebihi durasi sumber.')
@@ -167,24 +243,44 @@ def export(id:str,s:DBSession=Depends(session)):
     c=get(s,Clip,id); return enqueue(s,c.project_id,'export',c.id,{'plan':c.plan,'revision':c.revision,'aspect_ratio':get(s,Project,c.project_id).aspect_ratio})
 @app.get('/api/jobs/{id}',response_model=JobView)
 @app.get('/api/exports/{id}',response_model=JobView)
-def job(id:str,s:DBSession=Depends(session)): return serialize(get(s,Job,id))
+def job(id:str,s:DBSession=Depends(session)): return public_job(s,get(s,Job,id))
 @app.post('/api/jobs/{id}/cancel')
 def cancel(id:str,s:DBSession=Depends(session)):
     j=s.scalar(select(Job).where(Job.id==id).with_for_update())
     if j is None: raise HTTPException(404,'Pekerjaan tidak ditemukan.')
-    if j.status in ('queued','running'): j.status='cancelled'; j.stage='Dibatalkan'; s.commit()
-    return serialize(j)
+    if j.status in PENDING:
+        j.status='cancelling' if j.status in ('running','cancelling') else 'cancelled'
+        j.stage='Membatalkan; menunggu proses berhenti' if j.status=='cancelling' else 'Dibatalkan'
+        if j.library_id and j.status=='cancelled':
+            from .db import VideoClip
+            v=s.get(VideoClip,j.library_id)
+            if v:v.status='failed';v.error='Persiapan dibatalkan.'
+        s.commit()
+    return public_job(s,j)
+
+@app.post('/api/jobs/{id}/check',status_code=202,response_model=JobView)
+def check_waiting(id:str,s:DBSession=Depends(session)):
+    j=s.scalar(select(Job).where(Job.id==id).with_for_update())
+    if not j:raise HTTPException(404,'Pekerjaan tidak ditemukan.')
+    if j.status not in WAITING:raise HTTPException(409,'Pekerjaan tidak sedang menunggu Gemini.')
+    from .db import now
+    if j.next_attempt_at and j.next_attempt_at>now():return public_job(s,j)
+    if (j.telemetry or {}).get('wait_kind') not in ('database','key_config'):clear_expired_for_manual(j.payload.get('gemini_model',''))
+    j.status='queued';j.wait_reason=None;j.next_attempt_at=None;j.stage='Menunggu giliran';s.commit();wake();return public_job(s,j)
+
 @app.post('/api/jobs/{id}/retry',status_code=202)
 def retry(id:str,s:DBSession=Depends(session)):
     j=get(s,Job,id)
     if j.status not in ('failed','cancelled'): raise HTTPException(409,'Pekerjaan belum gagal atau dibatalkan.')
     payload=j.payload
-    if j.kind=='analysis':
-        p=get(s,Project,j.project_id)
-        if not p.gemini_model: raise HTTPException(422,'Pilih model Gemini terlebih dahulu.')
-        validate_model(p.gemini_model)
-        payload={**j.payload,'gemini_model':p.gemini_model}
-    return enqueue(s,j.project_id,j.kind,j.clip_id,payload)
+    # Keep the immutable model/source snapshot and saved stages on retry.
+    if j.library_id:
+        from .db import VideoClip
+        from .queue_runtime import add_library
+        v=get(s,VideoClip,j.library_id);v.status='queued';v.error=None
+        fresh=add_library(s,j.library_id);s.commit();wake();return public_job(s,fresh)
+    if payload.get('gemini_model'):clear_expired_for_manual(payload['gemini_model'])
+    return enqueue(s,j.project_id,j.kind,j.clip_id,payload,j.checkpoint)
 @app.get('/api/media/{pid}/{filename}')
 def media(pid:str,filename:str,s:DBSession=Depends(session)):
     get(s,Project,pid)
@@ -253,7 +349,7 @@ def delete_clip(id:str,s:DBSession=Depends(session)):
     s.execute(select(Project).where(Project.id==c.project_id).with_for_update()).scalar_one()
     c=s.scalar(select(Clip).where(Clip.id==id).with_for_update())
     if c is None:raise HTTPException(404,'Highlight tidak ditemukan.')
-    if s.scalar(select(Job).where(Job.project_id==c.project_id,Job.status.in_(['queued','running']))):
+    if s.scalar(select(Job).where(Job.project_id==c.project_id,Job.status.in_(PENDING))):
         raise HTTPException(409,'Tunggu pekerjaan proyek selesai atau batalkan sebelum menghapus highlight.')
     folder=project_dir(c.project_id).resolve()
     jobs=list(s.scalars(select(Job).where(Job.clip_id==id)))
@@ -317,5 +413,27 @@ def serve_audio(id:str,asset_id:str,s:DBSession=Depends(session)):
 def retry_mix(id:str,s:DBSession=Depends(session)):
     p=get(s,Project,id)
     prior=s.scalar(select(Job).where(Job.project_id==id,Job.kind.in_(['analysis','mix'])).order_by(Job.created_at.desc()))
-    payload=prior.payload if prior and prior.payload.get('visual_mode')=='mix' else {'gemini_model':p.gemini_model,'visual_mode':'mix','mix_hashtags':p.mix_hashtags,'library':library_snapshot(s,p.mix_hashtags)}
+    payload=prior.payload if prior and prior.payload.get('visual_mode')=='mix' else {'gemini_model':p.gemini_model,'visual_mode':'mix','mix_hashtags':p.mix_hashtags,'source_policy_version':1,'instansi_ids':p.instansi_ids,'include_global':p.include_global,'library':library_snapshot(s,p.mix_hashtags,p.instansi_ids,p.include_global)}
     return enqueue(s,id,'mix',payload=payload)
+
+class SubtitleRefineRequest(BaseModel):
+    revision:int=Field(ge=1)
+class SubtitleApplyRequest(SubtitleRefineRequest):
+    job_id:UUID
+    caption_ids:list[str]=Field(min_length=1,max_length=10000)
+@app.post('/api/clips/{id}/subtitle-refinement',status_code=202,response_model=JobView)
+def refine_subtitles(id:str,body:SubtitleRefineRequest,s:DBSession=Depends(session)):
+    c=get(s,Clip,id)
+    if c.revision!=body.revision:raise HTTPException(409,'Highlight berubah. Simpan dan muat ulang sebelum memeriksa subtitle.')
+    return enqueue(s,c.project_id,'subtitle_refine',c.id,{'plan':c.plan,'revision':c.revision})
+@app.post('/api/clips/{id}/subtitle-refinement/apply',response_model=ClipView)
+def apply_subtitles(id:str,body:SubtitleApplyRequest,s:DBSession=Depends(session)):
+    from .subtitle_refinement import apply_review
+    c=s.scalar(select(Clip).where(Clip.id==id).with_for_update())
+    if not c:raise HTTPException(404)
+    j=get(s,Job,str(body.job_id))
+    if j.kind!='subtitle_refine' or j.clip_id!=id or j.status!='succeeded':raise HTTPException(422,'Hasil pemeriksaan subtitle tidak tersedia untuk highlight ini.')
+    if c.revision!=body.revision or j.result.get('revision')!=c.revision:raise HTTPException(409,'Highlight berubah sejak pemeriksaan dimulai. Jalankan Perbaiki subtitle lagi; cache audio tetap digunakan.')
+    proposals=j.result.get('proposals',[])
+    if not set(body.caption_ids)<={p['caption_id'] for p in proposals}:raise HTTPException(422,'Blok subtitle tidak ditemukan pada hasil pemeriksaan.')
+    c.plan=apply_review(upgrade_plan(c.plan),proposals,set(body.caption_ids));c.revision+=1;s.commit();return serialize(c)

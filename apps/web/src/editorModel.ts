@@ -2,8 +2,8 @@ export type Fade={in_frames:number;out_frames:number;span:number;offset:number};
 export type Transition={kind:'black'|'crossfade'|'none';frames:number};
 export type Ratio='9:16'|'16:9'|'1:1'|'4:5'|'4:3';
 export const formats:{id:Ratio;width:number;height:number;label:string;hint:string}[]=[{id:'9:16',width:1080,height:1920,label:'Vertikal',hint:'TikTok · Shorts · Reels · Story'},{id:'16:9',width:1920,height:1080,label:'Horizontal',hint:'YouTube · TV'},{id:'1:1',width:1080,height:1080,label:'Persegi',hint:'Instagram · Facebook'},{id:'4:5',width:1080,height:1350,label:'Portrait',hint:'Feed Instagram'},{id:'4:3',width:1440,height:1080,label:'Klasik',hint:'Format televisi klasik'}];
-export type Style={x:number;y:number;width:number;height:number;rotation:number;opacity:number;font:'DejaVu Sans'|'Liberation Sans'|'Poppins';size:number;color:string;highlight:string;outline:number;align:'left'|'center'|'right';karaoke:boolean};
-export type Word={id:string;start:number;end:number;text:string};
+export type Style={x:number;y:number;width:number;height:number;rotation:number;opacity:number;font:'DejaVu Sans'|'Liberation Sans'|'Poppins';size:number;color:string;highlight:string;outline:number;align:'left'|'center'|'right';karaoke:boolean;subtitle_mode?:'sentence'|'word';subtitle_animation?:'none'|'soft_zoom'};
+export type Word={id:string;start:number;end:number;text:string;probability?:number|null;timing_estimated?:boolean};
 export type Caption={id:string;start:number;end:number;words:Word[];style:Style|null};
 export type Overlay={id:string;kind:'text'|'image';start:number;end:number;text:string;asset_id:string|null;layer:number;style:Style};
 export type AudioItem={id:string;asset_id:string;start:number;end:number;source_in:number;volume:number;fade?:Fade};
@@ -11,13 +11,13 @@ export type AudioAsset={id:string;name:string;duration:number;frames:number;url:
 export type Segment={id:string;source_in:number;duration:number;transform:{legacy_center?:boolean;mode:'fit'|'fill'|'split';x:number;y:number;scale:number;b:number};captions:Caption[];overlays:Overlay[];excluded_word_ids:string[];audio?:AudioItem[];broll?:Broll[]};
 export type Plan={source_fade?:Fade;source_volume?:number;version:2;fps:30;segments:Segment[];subtitle_style:Style};
 export type Clip={id:string;project_id:string;title:string;reason:string;revision:number;fulfills_prompt:boolean;plan:Plan};
-export type Project={mix_hashtags?:string[];visual_mode?:'podcast'|'mix';id:string;url:string;title:string;duration:number;status:string;created_at:string;gemini_model:string|null;aspect_ratio:Ratio;highlight_count:number;additional_prompt:string;analysis_report:{mix_message?:string;mix_status?:string;requested?:number;generated?:number;unmet_requests?:string[]}};
+export type Project={subtitle_mode?:'sentence'|'word';subtitle_animation?:'none'|'soft_zoom';instansi_ids?:string[];include_global?:boolean;mix_hashtags?:string[];visual_mode?:'podcast'|'mix';id:string;url:string;title:string;duration:number;status:string;created_at:string;updated_at:string;gemini_model:string|null;aspect_ratio:Ratio;highlight_count:number;additional_prompt:string;analysis_report:{subtitle_warning?:string;subtitle_model?:string;mix_message?:string;mix_status?:string;requested?:number;generated?:number;unmet_requests?:string[]}};
 export type SourceWord={start:number;end:number;text:string};
 export type Asset={id:string;name:string;width:number;height:number;url:string};
 export type Manifest={status:string;proxy_url?:string;thumbnail_base?:string;thumbnail_interval?:number;thumbnail_count?:number;waveform?:number[];waveform_interval?:number;width?:number;height?:number};
 export const uid=()=>crypto.randomUUID();
 export const clamp=(v:number,a:number,b:number)=>Math.max(a,Math.min(b,v));
-export const style=():Style=>({x:.5,y:.84,width:.88,height:.2,rotation:0,opacity:1,font:'DejaVu Sans',size:62,color:'#FFFFFF',highlight:'#5EEAD4',outline:3,align:'center',karaoke:true});
+export const style=():Style=>({x:.5,y:.84,width:.88,height:.2,rotation:0,opacity:1,font:'DejaVu Sans',size:62,color:'#FFFFFF',highlight:'#5EEAD4',outline:3,align:'center',karaoke:true,subtitle_mode:'sentence',subtitle_animation:'none'});
 export const total=(p:Plan)=>p.segments.reduce((n,s)=>n+s.duration,0);
 export const offsets=(p:Plan)=>{let n=0;return p.segments.map(s=>{const start=n;n+=s.duration;return {s,start,end:n}})};
 export const atFrame=(p:Plan,f:number)=>offsets(p).find(x=>f>=x.start&&f<x.end)||offsets(p).at(-1)!;
@@ -38,7 +38,23 @@ export function trimSegment(p:Plan,id:string,newIn:number,newDuration:number,sou
 }
 export function splitCaption(s:Segment,id:string,frame:number){const i=s.captions.findIndex(c=>c.id===id),c=s.captions[i];if(!c||c.words.length<2)return;const candidates=c.words.slice(1).map(w=>w.start),cut=candidates.reduce((a,b)=>Math.abs(b-frame)<Math.abs(a-frame)?b:a);const left=c.words.filter(w=>w.start<cut).map(w=>({...w,end:Math.min(w.end,cut)})),right=c.words.filter(w=>w.start>=cut);if(!left.length||!right.length)return;s.captions.splice(i,1,{...c,end:cut,words:left},{...structuredClone(c),id:uid(),start:cut,words:right})}
 export function resizeCaption(c:Caption,start:number,end:number){const old=c.end-c.start,ratio=(end-start)/old;const words=c.words.map(w=>({...w,start:clamp(Math.round(start+(w.start-c.start)*ratio),start,end-1),end:clamp(Math.round(start+(w.end-c.start)*ratio),start+1,end)}));c.start=start;c.end=end;c.words=words.map(w=>({...w,end:Math.max(w.start+1,w.end)}))}
-export function replaceCaptionText(c:Caption,text:string){const tokens=text.trim().split(/\s+/).filter(Boolean);if(!tokens.length){c.words=[];return}if(tokens.length===c.words.length){c.words.forEach((w,i)=>w.text=tokens[i]);return}const span=c.end-c.start;if(tokens.length>span)return;c.words=tokens.map((text,i)=>({id:uid(),start:c.start+Math.floor(span*i/tokens.length),end:c.start+Math.floor(span*(i+1)/tokens.length),text}))}
+export function replaceCaptionText(c:Caption,text:string){
+ const tokens=text.trim().split(/\s+/).filter(Boolean),old=c.words;
+ if(tokens.length===old.length){old.forEach((w,i)=>{if(w.text!==tokens[i]){w.text=tokens[i];w.probability=null}});return}
+ if(tokens.length>c.end-c.start)return;
+ // Longest common subsequence retains timing anchors for unchanged words.
+ const norm=(x:string)=>x.toLocaleLowerCase().replace(/[.,!?;:]/g,''),dp=Array.from({length:old.length+1},()=>new Uint16Array(tokens.length+1));
+ for(let i=old.length-1;i>=0;i--)for(let j=tokens.length-1;j>=0;j--)dp[i][j]=norm(old[i].text)===norm(tokens[j])?dp[i+1][j+1]+1:Math.max(dp[i+1][j],dp[i][j+1]);
+ const anchors=new Map<number,Word>();let i=0,j=0;
+ while(i<old.length&&j<tokens.length){if(norm(old[i].text)===norm(tokens[j])){anchors.set(j,{...old[i],text:tokens[j]});i++;j++}else if(dp[i+1][j]>=dp[i][j+1])i++;else j++}
+ const out:Word[]=[];let at=0;
+ while(at<tokens.length){const anchor=anchors.get(at);if(anchor){out.push(anchor);at++;continue}let end=at+1;while(end<tokens.length&&!anchors.has(end))end++;
+  let left=out.at(-1)?.end??c.start,right=anchors.get(end)?.start??c.end;
+  // If no gap exists, retain the anchors and explicitly mark the local estimate.
+  if(right-left<end-at){left=Math.max(c.start,right-(end-at));}
+  for(let k=at;k<end;k++){const a=left+Math.floor((right-left)*(k-at)/(end-at)),b=left+Math.floor((right-left)*(k-at+1)/(end-at));out.push({id:uid(),start:clamp(a,c.start,c.end-1),end:clamp(Math.max(a+1,b),c.start+1,c.end),text:tokens[k],timing_estimated:true,probability:null})}at=end;
+ }c.words=out;
+}
 
 export function resizeAudio(item:AudioItem,start:number,end:number,assetFrames:number){const delta=start-item.start;const source=item.source_in+delta;const sourceIn=clamp(source,0,Math.max(0,assetFrames-1));const a=start+(sourceIn-source);if(item.fade?.span)item.fade={...item.fade,offset:Math.max(0,item.fade.offset+a-item.start)};item.start=a;item.source_in=sourceIn;item.end=Math.max(a+1,Math.min(end,a+assetFrames-sourceIn))}
 
@@ -65,7 +81,7 @@ export function duplicateItem(p:Plan,sel:TimelineSelection):TimelineSelection|nu
 }
 
 export type Broll={id:string;asset_id:string;start:number;end:number;source_in:number;reason:string;transform:Segment['transform'];transition_in:Transition;transition_out:Transition};
-export type VideoAsset={id:string;title:string;hashtags:string[];hashtag_ids:string[];explain:string;scenes:{start:number;end:number;explain:string}[];duration:number;frames:number;width:number;height:number;status:string;error:string|null;archived:boolean;revision:number;proxy_url:string;thumbnail_url:string;thumbnail_base:string};
+export type VideoAsset={created_at:string;scope:'global'|'instansi';instansi_ids:string[];instansi_names:string[];id:string;title:string;hashtags:string[];hashtag_ids:string[];explain:string;scenes:{start:number;end:number;explain:string}[];duration:number;frames:number;width:number;height:number;status:string;error:string|null;archived:boolean;revision:number;source_url:string;proxy_url:string;thumbnail_url:string;thumbnail_base:string};
 export const emptyFade=():Fade=>({in_frames:0,out_frames:0,span:0,offset:0});
 export const fadeOf=(a:AudioItem):Fade=>({...emptyFade(),...a.fade,span:a.fade?.span||a.end-a.start});
 export function fadeGain(f:Fade|undefined,frame:number,length:number){if(!f)return 1;const span=f.span||length,x=frame+f.offset;return clamp(Math.min(1,f.in_frames?x/Math.min(f.in_frames,span):1,f.out_frames?(span-x)/Math.min(f.out_frames,span):1),0,1)}

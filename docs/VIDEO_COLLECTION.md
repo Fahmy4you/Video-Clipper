@@ -153,3 +153,6 @@ Sekelompok pria berjas dan batik saling bersalaman lalu berkumpul untuk foto di 
 Sebelumnya: `lv_0_20260720212018.mp4`
 
 Salinan proyek: `/home/fahmy_root/projects/video_clipping/storage/video-clips/4223f88f-cc14-5402-837f-59e988cee09a/salaman-dan-foto-bersama-acara-formal.mp4`
+
+
+Pemilihan sumber instansi/Global dan kolaborasi mengikuti [panduan Instansi](INSTANSI.md). Filter hashtag AND diterapkan setelah batas sumber. Pemilihan manual studio tetap memakai seluruh koleksi.

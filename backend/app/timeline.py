@@ -20,7 +20,11 @@ class VisualStyle(Strict):
     outline:float=Field(default=3,ge=0,le=12)
     align:Literal['left','center','right']='center'
     karaoke:bool=True
+    subtitle_mode:Literal['sentence','word']='sentence'
+    subtitle_animation:Literal['none','soft_zoom']='none'
 class FrameWord(Strict):
+    probability:float|None=Field(default=None,ge=0,le=1)
+    timing_estimated:bool=False
     id:str=Field(max_length=100)
     start:int=Field(ge=0)
     end:int=Field(gt=0)

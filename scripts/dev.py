@@ -13,11 +13,11 @@ configured=subprocess.run([str(PY),'-c','from app.config import settings; raise 
 if configured:
     result=subprocess.run([str(PY),'-m','alembic','-c','backend/alembic.ini','upgrade','head'],env=env)
     if result.returncode: print('Migrasi belum berhasil. UI tetap dibuka untuk petunjuk setup.',flush=True)
-    else:
-        subprocess.run([str(PY),'-c',"from app.db import Session,Job,VideoClip; from sqlalchemy import update; s=Session(); s.execute(update(Job).where(Job.status.in_(['running','queued'])).values(status='failed',stage='Terhenti',error='Launcher sebelumnya terhenti. Gunakan Coba lagi untuk melanjutkan.')); s.execute(update(VideoClip).where(VideoClip.status.in_(['processing','queued'])).values(status='failed',error='Pemrosesan terhenti. Gunakan Coba lagi.')); s.commit()"],env=env,check=True)
+
 logs=ROOT/'storage/logs'; logs.mkdir(parents=True,exist_ok=True)
 redis=ROOT/'storage/redis'; redis.mkdir(exist_ok=True)
-children=[];handles=[]
+children=[];handles=[];worker=None
+from worker_supervisor import WorkerSupervisor
 def start(name,args):
     f=(logs/(name+'.log')).open('a');handles.append(f)
     p=subprocess.Popen(args,env=env,stdout=f,stderr=subprocess.STDOUT,start_new_session=True)
@@ -37,17 +37,21 @@ try:
     ready(6381)
     start('api',[str(PY),'-m','uvicorn','app.main:app','--host','127.0.0.1','--port','8000'])
     ready(8000)
-    start('worker',[str(PY),'-m','celery','-A','app.tasks:celery','worker','--loglevel=info','--concurrency=1','--pool=solo'])
+    worker=WorkerSupervisor([str(PY),'-m','celery','-A','app.tasks:celery','worker','--loglevel=info','--concurrency=1','--pool=solo'],env,logs,ROOT/'storage/runtime/worker.json')
+    worker.start()
+    start('dispatcher',[str(PY),'-m','app.queue_runtime'])
     start('web',['npm','--prefix','apps/web','run','dev'])
     ready(5173)
     print('Video Clipping siap: http://localhost:5173 | API: http://localhost:8000/docs',flush=True)
     print('Ctrl+C untuk menghentikan semua layanan proyek. Log: storage/logs/',flush=True)
     while True:
+        worker.tick()
         for name,p in children:
             if p.poll() is not None: raise RuntimeError(f'{name} berhenti. Baca log lalu jalankan ulang.')
         time.sleep(1)
 except KeyboardInterrupt: print('Menghentikan layanan proyek...',flush=True)
 finally:
+    if worker:worker.stop()
     for name,p in reversed(children):
         if p.poll() is None:
             os.killpg(p.pid,signal.SIGTERM)

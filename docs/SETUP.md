@@ -29,7 +29,6 @@ Isi `.env` menggunakan host Windows aktual:
 
 ```dotenv
 DATABASE_URL=postgresql+psycopg://video_clipping:PASSWORD_URL_ENCODED@172.20.240.1:5432/video_clipping
-GEMINI_API_KEY=
 REDIS_URL=redis://127.0.0.1:6381/0
 WHISPER_MODEL=base
 WHISPER_THREADS=2
@@ -41,13 +40,29 @@ Launcher menjalankan Alembic sebelum API bila DATABASE_URL terisi. Untuk migrasi
 
 ## 3. Gemini
 
-Isi GEMINI_API_KEY milik sendiri di .env. Pilih model melalui dropdown Model Gemini saat membuat proyek.
-Daftar diambil dari Gemini API melalui backend. Tombol muat ulang mengambil katalog terbaru.
-Pilihan disimpan per proyek dan dapat diubah di editor; job analisis memakai snapshot model saat diantrekan.
-Proyek lama tanpa pilihan model harus memilih model terlebih dahulu. GEMINI_MODEL tidak lagi digunakan.
-Restart launcher setelah mengubah .env. API key hanya dibaca backend. Tanpa key, transcript lokal tetap
-tersimpan dan clip manual dapat dibuat; rekomendasi highlight menampilkan pesan konfigurasi.
-Panggilan Gemini memakai kuota akun sendiri dan mengirim teks transcript.
+Buka Pengaturan → Koneksi Gemini untuk menambah maksimal lima API key. Key disimpan di
+`apikey.json` pada root proyek, sejajar `.env`. File asli diabaikan Git; `apikey.json.example`
+berisi template kosong. Konfigurasi dibaca ulang tanpa restart.
+
+Untuk mengisi manual, gunakan format berikut di apikey.json (ganti nilai contoh dengan key sendiri):
+
+```json
+{"version":1,"connections":[{"id":"utama","name":"Utama","key":"ISI_KEY_SENDIRI","priority":1}]}
+```
+
+Setiap koneksi harus memiliki ID unik dan prioritas unik 1–5. Saat menyalin contoh manual, ubah ID juga.
+Penambahan lewat Pengaturan membuat ID secara otomatis.
+
+Key lengkap hanya dikirim saat pengguna menyimpan melalui dialog, tidak ditampilkan kembali melalui API.
+File asli, lock, dan sementara tidak boleh dimasukkan ke Git. Jangan menaruhnya di folder public.
+Pada pemakaian pertama, key lama dari .env dimigrasikan satu kali bila apikey.json belum ada;
+setelah itu key Gemini di .env diabaikan. File kosong yang valid berarti tidak ada koneksi.
+JSON rusak perlu diperbaiki; aplikasi tidak kembali ke key lama secara diam-diam.
+
+Pilih model dari dropdown saat membuat proyek. Snapshot pekerjaan mempertahankan model;
+key cadangan hanya digunakan bila mendukung model yang sama. Tambah/ganti/hapus, urutan prioritas,
+dan uji koneksi tersedia di Pengaturan. Database tetap memakai .env dan perubahan database memerlukan restart.
+Panggilan Gemini memakai kuota akun sendiri dan mengirim teks transkrip.
 
 ## 4. Menjalankan
 
@@ -83,3 +98,24 @@ argumen metadata_errors pada PyAV; PyAV 19 menghapus argumen tersebut. Proyek me
 ke >=16,<17 dan menyertakan tes decode WAV nyata, selain tes timeline/subtitle.
 Model Whisper diunduh hanya pada pemakaian pertama ke storage/models. Tahap persiapan model
 bisa lebih lama dibanding pemakaian berikutnya; ini terpisah dari transkripsi audio.
+
+## Video panjang dan log
+
+Whisper base CPU INT8, dua thread, memproses inti 120 detik dengan konteks dua detik pada kedua sisi.
+Checkpoint tiap bagian disimpan di storage/projects/<project-id>/transcription; jangan menghapusnya
+jika ingin melanjutkan pekerjaan. Transkrip lengkap lama tetap digunakan. Sumber 1080p dipertahankan.
+Proses anak diawasi dengan batas RAM min(2 GiB, 60% RAM Ubuntu); kegagalan suatu bagian dicoba ulang
+sekali. Gangguan database/cancel yang dihentikan dengan tertib tidak dihitung sebagai kegagalan model.
+
+Worker yang mati dipulihkan maksimal tiga kali dalam sepuluh menit (jeda 5, 15, 30 detik); halaman dan API
+bertahan. Setelah batas habis, periksa log sebelum menjalankan kembali launcher. Jangan menjalankan
+build atau tes encoding berat bersamaan dengan transkripsi pada laptop RAM terbatas.
+
+Log layanan: storage/logs/worker.log, api.log, dispatcher.log, web.log, redis.log.
+Di File Explorer Windows: \\wsl.localhost\Ubuntu\home\fahmy_root\projects\video_clipping\storage\logs.
+Bukti OOM dapat dilihat melalui PowerShell: `wsl -d Ubuntu -- journalctl -k -b -1 --no-pager`.
+Lihat docs/LONG_VIDEO_RECOVERY.md untuk diagnosis dan catatan pengujian terbaru.
+
+## Daftar model tanpa prompt uji
+
+Pengaturan menyediakan **Periksa katalog**, yang hanya membaca metadata Google. Cache bertahan 24 jam dan setelah restart. Dropdown dapat menampilkan model yang belum pernah dipakai; katalog tidak menjamin akses generate atau sisa kuota. Lihat [MODEL_CATALOG.md](MODEL_CATALOG.md).

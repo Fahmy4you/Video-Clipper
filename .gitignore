@@ -7,3 +7,7 @@ __pycache__/
 .pytest_cache/
 *.pyc
 *.tsbuildinfo
+
+/apikey.json
+/apikey.json.tmp
+/apikey.json.lock

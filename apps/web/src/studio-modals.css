@@ -1,5 +1,5 @@
 /* Focused media dialogs share the app tokens, while their video surfaces stay neutral. */
-.audio-modal,.source-modal{position:fixed;inset:0;margin:auto;max-height:calc(100dvh - 48px);overflow:auto;padding:24px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--text);box-shadow:0 20px 70px #0004;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.audio-modal,.source-modal{position:fixed;inset:0;margin:auto;max-height:calc(100dvh - 48px);overflow:auto;padding:24px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--text);box-shadow:0 20px 70px #0004;}
 .audio-modal{width:min(600px,calc(100vw - 32px))}
 .source-modal{width:min(1080px,calc(100vw - 48px))}
 .audio-modal::backdrop,.source-modal::backdrop{background:#03071299}
@@ -40,9 +40,7 @@
 .source-modal .source-transport span{min-width:66px;text-align:center}
 .source-modal .source-transport label{display:flex;flex-direction:row;flex-direction:row;align-items:center;gap:8px;margin:0 0 0 16px}
 .source-modal .source-transport input{width:100px}
-.source-modal .source-scroll{overflow-x:auto;scrollbar-width:thin;scrollbar-color:#64748b var(--surface-alt);border:1px solid var(--line);border-radius:4px}
-.source-modal .source-scroll::-webkit-scrollbar{display:block;height:7px}
-.source-modal .source-scroll::-webkit-scrollbar-thumb{background:#64748b;border-radius:4px}
+.source-modal .source-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:4px}
 .source-modal .source-strip{height:96px;position:relative;touch-action:none}
 .source-modal .source-strip>img{position:absolute;top:0;height:100%;object-fit:cover;pointer-events:none;opacity:.65}
 .source-modal .source-range{position:absolute;top:0;height:100%;border:3px solid var(--accent);background:#60a5fa1a;cursor:grab;touch-action:none}
@@ -81,3 +79,7 @@ body:has(.visual-editor) .audio-modal input,body:has(.visual-editor) .audio-moda
 @media(max-width:700px){.audio-modal,.source-modal{width:calc(100vw - 24px);max-height:calc(100dvh - 24px);padding:16px}.audio-modal h2,.source-modal h2{font-size:18px}.audio-modal header,.source-modal header{gap:12px}.audio-modal p,.source-modal p{font-size:12px}.source-modal>.source-editor>video,.source-modal>video{height:34dvh}.source-modal .source-transport{gap:4px}.source-modal .source-transport label{margin-left:8px}.source-modal .source-transport input{width:68px}.source-modal footer{gap:8px}.source-modal footer>span{width:100%;margin:0 0 4px}.source-modal button,.audio-modal button{min-height:44px}.broll-choice>img{width:80px;height:56px}.source-modal .broll-choice{gap:12px}.broll-choice>.broll-choice-duration{display:none}.broll-choice strong{font-size:12px}.broll-choice p{display:none}.source-modal .broll-choice-duration-mobile{display:inline}.audio-library .audio-add{min-height:44px;font-size:14px}.source-modal .source-transport button{width:36px;height:36px;min-height:36px}.source-modal .source-range>button{min-height:0}}
 @media(max-width:420px){.audio-modal .audio-source-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}.audio-modal .audio-source-tabs button{min-height:60px;padding:8px;flex-direction:row;font-size:12px}.broll-choice .broll-tags{font-size:12px}.source-modal .source-transport label{width:100%;justify-content:center;margin:6px 0 0}}
 
+
+.subtitle-review-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.subtitle-review-actions .button{height:32px;font-size:12px;padding:0 8px}.subtitle-review{user-select:none;display:grid;gap:16px}.subtitle-review video{width:100%;max-height:220px;background:#000}.subtitle-review-row{display:grid;grid-template-columns:44px minmax(0,1fr) 32px;align-items:start;gap:12px;border-top:1px solid var(--line);padding-top:16px}.subtitle-review-row p{margin:4px 0 12px;overflow-wrap:anywhere}.subtitle-review-row input{width:16px;height:16px}.subtitle-review .check{display:flex;gap:8px;align-items:center}.subtitle-review .check input{width:16px;height:16px}
+
+.subtitle-review-pick{display:grid;place-items:center;width:44px;min-height:44px}.subtitle-review .check{min-height:44px}

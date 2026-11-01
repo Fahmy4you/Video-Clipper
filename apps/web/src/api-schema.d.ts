@@ -4,6 +4,42 @@
  */
 
 export interface paths {
+    "/api/instansi": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listing */
+        get: operations["listing_api_instansi_get"];
+        put?: never;
+        /** Create */
+        post: operations["create_api_instansi_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/instansi/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove */
+        delete: operations["remove_api_instansi__id__delete"];
+        options?: never;
+        head?: never;
+        /** Rename */
+        patch: operations["rename_api_instansi__id__patch"];
+        trace?: never;
+    };
     "/api/video-clips": {
         parameters: {
             query?: never;
@@ -110,6 +146,76 @@ export interface paths {
         patch: operations["rename_api_hashtags__id__patch"];
         trace?: never;
     };
+    "/api/gemini-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Config */
+        get: operations["get_config_api_gemini_config_get"];
+        put?: never;
+        /** Add */
+        post: operations["add_api_gemini_config_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/gemini-config/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Order */
+        patch: operations["order_api_gemini_config_order_patch"];
+        trace?: never;
+    };
+    "/api/gemini-config/{ident}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove */
+        delete: operations["remove_api_gemini_config__ident__delete"];
+        options?: never;
+        head?: never;
+        /** Edit */
+        patch: operations["edit_api_gemini_config__ident__patch"];
+        trace?: never;
+    };
+    "/api/gemini-config/{ident}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test */
+        post: operations["test_api_gemini_config__ident__test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -127,6 +233,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/model-catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Model Catalog Snapshot */
+        get: operations["model_catalog_snapshot_api_model_catalog_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/model-catalog/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refresh Model Catalog */
+        post: operations["refresh_model_catalog_api_model_catalog_refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/models": {
         parameters: {
             query?: never;
@@ -136,6 +276,40 @@ export interface paths {
         };
         /** Models */
         get: operations["models_api_models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/gemini-connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Gemini Connections */
+        get: operations["gemini_connections_api_gemini_connections_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Queue Summary */
+        get: operations["queue_summary_api_queue_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -369,6 +543,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/jobs/{id}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check Waiting */
+        post: operations["check_waiting_api_jobs__id__check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/jobs/{id}/retry": {
         parameters: {
             query?: never;
@@ -558,10 +749,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/clips/{id}/subtitle-refinement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refine Subtitles */
+        post: operations["refine_subtitles_api_clips__id__subtitle_refinement_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/clips/{id}/subtitle-refinement/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply Subtitles */
+        post: operations["apply_subtitles_api_clips__id__subtitle_refinement_apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** Add */
+        Add: {
+            /** Revision */
+            revision: string;
+            /** Name */
+            name: string;
+            /**
+             * Key
+             * Format: password
+             */
+            key: string;
+        };
         /** AudioImport */
         AudioImport: {
             /**
@@ -608,6 +845,16 @@ export interface components {
              * @default Video
              */
             title: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "global" | "instansi";
+            /**
+             * Instansi Ids
+             * @default []
+             */
+            instansi_ids: string[];
         };
         /** Body_upload_asset_api_projects__id__assets_post */
         Body_upload_asset_api_projects__id__assets_post: {
@@ -660,6 +907,30 @@ export interface components {
             words?: components["schemas"]["FrameWord"][];
             style?: components["schemas"]["VisualStyle"] | null;
         };
+        /** CatalogConnection */
+        CatalogConnection: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Refreshing */
+            refreshing: boolean;
+            /** Stale */
+            stale: boolean;
+            /** Fetched At */
+            fetched_at?: string | null;
+            /** Next Attempt At */
+            next_attempt_at?: string | null;
+            /** Error */
+            error?: string | null;
+            /** Model Count */
+            model_count: number;
+        };
+        /** CatalogRefresh */
+        CatalogRefresh: {
+            /** Connection Id */
+            connection_id?: string | null;
+        };
         /** ClipInput */
         ClipInput: {
             /** Title */
@@ -695,6 +966,36 @@ export interface components {
             revision: number;
             /** Plan */
             plan: components["schemas"]["EditPlanV2"] | components["schemas"]["EditPlan"];
+        };
+        /** ConfigView */
+        ConfigView: {
+            /**
+             * Max Connections
+             * @default 5
+             */
+            max_connections: number;
+            /** Revision */
+            revision: string;
+            /** Connections */
+            connections: components["schemas"]["GeminiConnectionView"][];
+        };
+        /** ConnectionCooldown */
+        ConnectionCooldown: {
+            /** Model */
+            model: string;
+            /** Status */
+            status: string;
+            /** Next Attempt At */
+            next_attempt_at?: string | null;
+        };
+        /** Edit */
+        Edit: {
+            /** Revision */
+            revision: string;
+            /** Name */
+            name: string;
+            /** Key */
+            key?: string | null;
         };
         /** EditPlan */
         EditPlan: {
@@ -757,6 +1058,13 @@ export interface components {
         };
         /** FrameWord */
         FrameWord: {
+            /** Probability */
+            probability?: number | null;
+            /**
+             * Timing Estimated
+             * @default false
+             */
+            timing_estimated: boolean;
             /** Id */
             id: string;
             /** Start */
@@ -766,17 +1074,89 @@ export interface components {
             /** Text */
             text: string;
         };
+        /** GeminiConnectionView */
+        GeminiConnectionView: {
+            /**
+             * Masked Key
+             * @default ••••••••
+             */
+            masked_key: string;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Priority */
+            priority: number;
+            /** Status */
+            status: string;
+            /** Models */
+            models: string[];
+            /** Used Models */
+            used_models?: string[];
+            /**
+             * Catalog Refreshing
+             * @default false
+             */
+            catalog_refreshing: boolean;
+            /** Catalog Error */
+            catalog_error?: string | null;
+            /** Catalog Fetched At */
+            catalog_fetched_at?: string | null;
+            /** Cooldowns */
+            cooldowns: components["schemas"]["ConnectionCooldown"][];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** InstansiInput */
+        InstansiInput: {
+            /** Name */
+            name: string;
+        };
+        /** InstansiView */
+        InstansiView: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Video Count
+             * @default 0
+             */
+            video_count: number;
+            /**
+             * Project Count
+             * @default 0
+             */
+            project_count: number;
+        };
         /** JobView */
         JobView: {
+            /** Heartbeat At */
+            heartbeat_at?: string | null;
+            /** Telemetry */
+            telemetry?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Queue At
+             * Format: date-time
+             */
+            queue_at: string;
+            /** Next Attempt At */
+            next_attempt_at?: string | null;
+            /** Queue Position */
+            queue_position?: number | null;
+            /** Wait Reason */
+            wait_reason?: string | null;
+            /** Connection Label */
+            connection_label?: string | null;
             /** Id */
             id: string;
             /** Project Id */
-            project_id: string;
+            project_id: string | null;
             /** Clip Id */
             clip_id: string | null;
             /** Kind */
@@ -829,6 +1209,10 @@ export interface components {
         };
         /** Metadata */
         Metadata: {
+            /** Scope */
+            scope?: ("global" | "instansi") | null;
+            /** Instansi Ids */
+            instansi_ids?: string[] | null;
             /** Title */
             title: string;
             /** Hashtags */
@@ -845,17 +1229,63 @@ export interface components {
             /** Revision */
             revision: number;
         };
+        /** ModelCatalog */
+        ModelCatalog: {
+            /** Models */
+            models: components["schemas"]["ModelOption"][];
+            /** Connections */
+            connections: components["schemas"]["CatalogConnection"][];
+            /** Refreshing */
+            refreshing: boolean;
+            /** Stale */
+            stale: boolean;
+        };
+        /** ModelConnectionStatus */
+        ModelConnectionStatus: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Status */
+            status: string;
+            /** Next Attempt At */
+            next_attempt_at?: string | null;
+        };
         /** ModelOption */
         ModelOption: {
             /** Id */
             id: string;
             /** Name */
             name: string;
+            /**
+             * Status
+             * @default catalog
+             */
+            status: string;
+            /**
+             * Selectable
+             * @default true
+             */
+            selectable: boolean;
+            /**
+             * Stale
+             * @default false
+             */
+            stale: boolean;
+            /** Connections */
+            connections?: components["schemas"]["ModelConnectionStatus"][];
         };
         /** ModelSelection */
         ModelSelection: {
             /** Gemini Model */
             gemini_model: string;
+        };
+        /** Order */
+        Order: {
+            /** Revision */
+            revision: string;
+            /** Ids */
+            ids: string[];
         };
         /** Overlay */
         Overlay: {
@@ -888,6 +1318,20 @@ export interface components {
         ProjectInput: {
             /** Gemini Model */
             gemini_model: string;
+            /**
+             * Enqueue Analysis
+             * @default false
+             */
+            enqueue_analysis: boolean;
+            /** Request Id */
+            request_id?: string | null;
+            /** Instansi Ids */
+            instansi_ids?: string[];
+            /**
+             * Include Global
+             * @default true
+             */
+            include_global: boolean;
             /** Mix Hashtags */
             mix_hashtags?: string[];
             /**
@@ -896,6 +1340,18 @@ export interface components {
              * @enum {string}
              */
             visual_mode: "podcast" | "mix";
+            /**
+             * Subtitle Mode
+             * @default sentence
+             * @enum {string}
+             */
+            subtitle_mode: "sentence" | "word";
+            /**
+             * Subtitle Animation
+             * @default none
+             * @enum {string}
+             */
+            subtitle_animation: "none" | "soft_zoom";
             /**
              * Aspect Ratio
              * @default 9:16
@@ -917,6 +1373,13 @@ export interface components {
         };
         /** ProjectView */
         ProjectView: {
+            /** Instansi Ids */
+            instansi_ids?: string[];
+            /**
+             * Include Global
+             * @default true
+             */
+            include_global: boolean;
             /** Mix Hashtags */
             mix_hashtags?: string[];
             /**
@@ -925,6 +1388,18 @@ export interface components {
              * @enum {string}
              */
             visual_mode: "podcast" | "mix";
+            /**
+             * Subtitle Mode
+             * @default sentence
+             * @enum {string}
+             */
+            subtitle_mode: "sentence" | "word";
+            /**
+             * Subtitle Animation
+             * @default none
+             * @enum {string}
+             */
+            subtitle_animation: "none" | "soft_zoom";
             /**
              * Aspect Ratio
              * @enum {string}
@@ -955,6 +1430,16 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** Revision */
+        Revision: {
+            /** Revision */
+            revision: string;
         };
         /** Scene */
         Scene: {
@@ -1019,6 +1504,23 @@ export interface components {
              */
             margin: number;
         };
+        /** SubtitleApplyRequest */
+        SubtitleApplyRequest: {
+            /** Revision */
+            revision: number;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Caption Ids */
+            caption_ids: string[];
+        };
+        /** SubtitleRefineRequest */
+        SubtitleRefineRequest: {
+            /** Revision */
+            revision: number;
+        };
         /** TagInput */
         TagInput: {
             /** Name Tag */
@@ -1035,6 +1537,18 @@ export interface components {
              * @default 0
              */
             video_count: number;
+        };
+        /** Test */
+        Test: {
+            /** Model */
+            model?: string | null;
+        };
+        /** TestResult */
+        TestResult: {
+            /** Ok */
+            ok: boolean;
+            /** Message */
+            message: string;
         };
         /** Transform */
         Transform: {
@@ -1096,6 +1610,61 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** VideoClipView */
+        VideoClipView: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /** Url Path */
+            url_path: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "global" | "instansi";
+            /** Instansi Ids */
+            instansi_ids?: string[];
+            /** Instansi Names */
+            instansi_names?: string[];
+            /** Hashtags */
+            hashtags: string[];
+            /** Hashtag Ids */
+            hashtag_ids: string[];
+            /** Explain */
+            explain: string;
+            /** Scenes */
+            scenes: components["schemas"]["Scene"][];
+            /** Duration */
+            duration: number;
+            /** Frames */
+            frames: number;
+            /** Width */
+            width: number;
+            /** Height */
+            height: number;
+            /** Status */
+            status: string;
+            /** Error */
+            error?: string | null;
+            /** Archived */
+            archived: boolean;
+            /** Revision */
+            revision: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Source Url */
+            source_url: string;
+            /** Proxy Url */
+            proxy_url: string;
+            /** Thumbnail Url */
+            thumbnail_url: string;
+            /** Thumbnail Base */
+            thumbnail_base: string;
         };
         /** VisualStyle */
         VisualStyle: {
@@ -1166,6 +1735,18 @@ export interface components {
              * @default true
              */
             karaoke: boolean;
+            /**
+             * Subtitle Mode
+             * @default sentence
+             * @enum {string}
+             */
+            subtitle_mode: "sentence" | "word";
+            /**
+             * Subtitle Animation
+             * @default none
+             * @enum {string}
+             */
+            subtitle_animation: "none" | "soft_zoom";
         };
         /** Word */
         Word: {
@@ -1185,6 +1766,125 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listing_api_instansi_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstansiView"][];
+                };
+            };
+        };
+    };
+    create_api_instansi_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InstansiInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstansiView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_api_instansi__id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_api_instansi__id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InstansiInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstansiView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     listing_api_video_clips_get: {
         parameters: {
             query?: {
@@ -1203,7 +1903,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["VideoClipView"][];
                 };
             };
             /** @description Validation Error */
@@ -1236,7 +1936,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["VideoClipView"];
                 };
             };
             /** @description Validation Error */
@@ -1302,7 +2002,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["VideoClipView"];
                 };
             };
             /** @description Validation Error */
@@ -1333,7 +2033,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["VideoClipView"];
                 };
             };
             /** @description Validation Error */
@@ -1498,6 +2198,197 @@ export interface operations {
             };
         };
     };
+    get_config_api_gemini_config_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigView"];
+                };
+            };
+        };
+    };
+    add_api_gemini_config_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Add"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    order_api_gemini_config_order_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Order"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_api_gemini_config__ident__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ident: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Revision"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    edit_api_gemini_config__ident__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ident: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Edit"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_api_gemini_config__ident__test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ident: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["Test"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     health_api_health_get: {
         parameters: {
             query?: never;
@@ -1514,6 +2405,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    model_catalog_snapshot_api_model_catalog_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelCatalog"];
+                };
+            };
+        };
+    };
+    refresh_model_catalog_api_model_catalog_refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CatalogRefresh"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelCatalog"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -1545,6 +2489,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    gemini_connections_api_gemini_connections_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeminiConnectionView"][];
+                };
+            };
+        };
+    };
+    queue_summary_api_queue_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };
@@ -2079,6 +3063,37 @@ export interface operations {
             };
         };
     };
+    check_waiting_api_jobs__id__check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     retry_api_jobs__id__retry_post: {
         parameters: {
             query?: never;
@@ -2485,6 +3500,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refine_subtitles_api_clips__id__subtitle_refinement_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubtitleRefineRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_subtitles_api_clips__id__subtitle_refinement_apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubtitleApplyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClipView"];
                 };
             };
             /** @description Validation Error */

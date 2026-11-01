@@ -8,7 +8,7 @@ from .config import ROOT
 from .mix_render import composite,fade_expr
 
 FONTS={'DejaVu Sans':ROOT/'apps/web/public/fonts/EditorDejaVu.ttf','Liberation Sans':ROOT/'apps/web/public/fonts/EditorLiberation.ttf','Poppins':ROOT/'apps/web/public/fonts/Poppins-SemiBold.ttf'}
-def text_image(text,style,w,h,words=None,frame=0):
+def text_image(text,style,w,h,words=None,frame=0,scale=1):
     size=max(1,round(style['size']*w/1080)); font=ImageFont.truetype(str(FONTS[style['font']]),size)
     canvas=Image.new('RGBA',(w,h));draw=ImageDraw.Draw(canvas);maxwidth=style['width']*w
     tokens=[(x['text'],style['highlight'] if style['karaoke'] and frame>=x['start'] else style['color']) for x in words] if words else [(x,style['color']) for x in text.split(' ')]
@@ -26,6 +26,9 @@ def text_image(text,style,w,h,words=None,frame=0):
         x=style['x']*w-width/2 if style['align']=='center' else style['x']*w-maxwidth/2 if style['align']=='left' else style['x']*w+maxwidth/2-width
         for token,color,n in line:
             draw.text((x,top+i*lineheight+size*.1),token,font=font,fill=color,stroke_width=round(style['outline']*w/1080),stroke_fill='#101010',anchor='lt');x+=n+space
+    if scale!=1:
+        cx,cy=style['x']*w,style['y']*h
+        canvas=canvas.transform((w,h),Image.Transform.AFFINE,(1/scale,0,cx-cx/scale,0,1/scale,cy-cy/scale),Image.Resampling.BICUBIC)
     if style['rotation']:canvas=canvas.rotate(-style['rotation'],resample=Image.Resampling.BICUBIC,center=(style['x']*w,style['y']*h))
     if style['opacity']!=1:canvas.putalpha(canvas.getchannel('A').point(lambda p:round(p*style['opacity'])))
     return canvas
@@ -45,7 +48,13 @@ def overlay_image(segment,global_style,frame,w,h,folder):
             if style['rotation']:im=im.rotate(-style['rotation'],expand=True,resample=Image.Resampling.BICUBIC)
             if style['opacity']!=1:im.putalpha(im.getchannel('A').point(lambda p:round(p*style['opacity'])))
             canvas.alpha_composite(im,(round(style['x']*w-im.width/2),round(style['y']*h-im.height/2)))
-        else:canvas.alpha_composite(text_image(item.get('text',''),style,w,h,item.get('words'),frame))
+        else:
+            words=item.get('words');scale=1
+            if words is not None:
+                from .subtitle_presentation import presentation
+                words,scale=presentation(item,style,frame)
+                if not words:continue
+            canvas.alpha_composite(text_image(item.get('text',''),style,w,h,words,frame,scale))
     return canvas
 
 def overlay_movie(plan,work,w,h,folder,check):
@@ -53,8 +62,8 @@ def overlay_movie(plan,work,w,h,folder,check):
     for segment in plan['segments']:
         points={0,segment['duration']}
         for c in segment['captions']:
-            points.update((c['start'],c['end']))
-            if (c.get('style') or plan['subtitle_style'])['karaoke']:points.update(x['start'] for x in c['words'])
+            from .subtitle_presentation import change_points
+            points.update(change_points(c,c.get('style') or plan['subtitle_style']))
         for o in segment['overlays']:points.update((o['start'],o['end']))
         points=sorted(points)
         for a,b in zip(points,points[1:]):

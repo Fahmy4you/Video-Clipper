@@ -9,6 +9,9 @@ from app.schemas import ModelSelection
 @pytest.mark.parametrize('count,prompt',[(1,''),(5,''),(1,'Sekitar 1:32, money management'),(5,'Topik tidak ada, timestamp 99:00')])
 def test_analysis_limits_priorities_and_report(monkeypatch,tmp_path,count,prompt):
     (tmp_path/'source.mp4').touch()
+    (tmp_path/'metadata.json').write_text('{"title":"Test podcast"}')
+    monkeypatch.setattr(tasks,'read_checkpoint',lambda *_:None)
+    monkeypatch.setattr(tasks,'checkpoint',lambda *_:None)
     words=[{'start':i,'end':i+.7,'text':('Money management.' if i==92 else 'Konteks.')} for i in range(300)]
     (tmp_path/'transcript.json').write_text(json.dumps({'words':words}))
     project=SimpleNamespace()
@@ -19,8 +22,7 @@ def test_analysis_limits_priorities_and_report(monkeypatch,tmp_path,count,prompt
     monkeypatch.setattr(tasks,'probe',lambda _: {'streams':[{'codec_type':'audio'}],'format':{'duration':'300'}})
     monkeypatch.setattr(tasks,'update',MagicMock());monkeypatch.setattr(tasks,'check',MagicMock())
     monkeypatch.setattr(tasks.settings,'gemini_api_key','test-only')
-    from google import genai
-    client=MagicMock();monkeypatch.setattr(genai,'Client',MagicMock(return_value=client))
+    client=MagicMock();monkeypatch.setattr(tasks,'generate',client.models.generate_content)
     missing='99:00' in prompt
     clips=[{'start':a,'end':a+35,'title':str(a),'reason':'Konteks utuh','fulfills_prompt':a==80 and not missing and bool(prompt)} for a in (0,40,80,120,160)]
     client.models.generate_content.return_value.text=json.dumps({'clips':clips,'unmet_requests':['Topik tidak ditemukan; 99:00 di luar durasi.'] if missing else []})

@@ -5,6 +5,8 @@ ROOT = Path(__file__).resolve().parents[2]
 class Settings(BaseSettings):
     database_url: str = ''
     gemini_api_key: str = ''
+    gemini_api_key_2: str = ''
+    gemini_api_key_3: str = ''
     redis_url: str = 'redis://127.0.0.1:6381/0'
     whisper_model: str = 'base'
     whisper_threads: int = 2
