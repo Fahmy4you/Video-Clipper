@@ -4,6 +4,40 @@
  */
 
 export interface paths {
+    "/api/transition-effects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Catalog */
+        get: operations["catalog_api_transition_effects_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/transition-effects/{effect_id}/audio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Audio */
+        get: operations["audio_api_transition_effects__effect_id__audio_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/instansi": {
         parameters: {
             query?: never;
@@ -475,6 +509,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/export-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Config */
+        get: operations["export_config_api_export_config_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/clips/{id}/exports": {
         parameters: {
             query?: never;
@@ -486,6 +537,23 @@ export interface paths {
         put?: never;
         /** Export */
         post: operations["export_api_clips__id__exports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/exports/{id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Export */
+        get: operations["download_export_api_exports__id__download_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -871,8 +939,20 @@ export interface components {
              */
             mode: string;
         };
+        /** BoundaryTransition */
+        BoundaryTransition: {
+            /** Id */
+            id: string;
+            /** Left */
+            left: string;
+            /** Right */
+            right: string;
+            value: components["schemas"]["Transition"];
+        };
         /** Broll */
         Broll: {
+            /** Visual Id */
+            visual_id?: string | null;
             /** Id */
             id: string;
             /** Asset Id */
@@ -1032,6 +1112,38 @@ export interface components {
             /** Segments */
             segments: components["schemas"]["Segment"][];
             subtitle_style?: components["schemas"]["VisualStyle"];
+            /** Transition Version */
+            transition_version?: 1 | null;
+            /** Transitions */
+            transitions?: components["schemas"]["BoundaryTransition"][];
+            /** Filters */
+            filters?: components["schemas"]["TimelineFilter"][];
+        };
+        /** EffectView */
+        EffectView: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Audio Url */
+            audio_url: string;
+            /** Duration */
+            duration: number;
+            /** Samples */
+            samples: number;
+            /** Sample Rate */
+            sample_rate: number;
+        };
+        /** ExportConfigView */
+        ExportConfigView: {
+            /** Mode */
+            mode: string;
+            /** Local Dir */
+            local_dir?: string | null;
+            /** Ready */
+            ready: boolean;
+            /** Error */
+            error?: string | null;
         };
         /** Fade */
         Fade: {
@@ -1550,6 +1662,28 @@ export interface components {
             /** Message */
             message: string;
         };
+        /** TimelineFilter */
+        TimelineFilter: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @default sharpen
+             * @constant
+             */
+            kind: "sharpen";
+            /** Start */
+            start: number;
+            /** End */
+            end: number;
+            /**
+             * Strength
+             * @default 25
+             */
+            strength: number;
+            /** Targets */
+            targets?: ("image" | "podcast" | "broll")[];
+        };
         /** Transform */
         Transform: {
             /**
@@ -1591,7 +1725,18 @@ export interface components {
              * @default black
              * @enum {string}
              */
-            kind: "black" | "crossfade" | "none";
+            kind: "black" | "crossfade" | "none" | "flash";
+            /**
+             * Sound
+             * @default none
+             * @enum {string}
+             */
+            sound: "none" | "camera_shutter";
+            /**
+             * Sound Volume
+             * @default 1
+             */
+            sound_volume: number;
             /**
              * Frames
              * @default 9
@@ -1766,6 +1911,57 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    catalog_api_transition_effects_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EffectView"][];
+                };
+            };
+        };
+    };
+    audio_api_transition_effects__effect_id__audio_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                effect_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     listing_api_instansi_get: {
         parameters: {
             query?: never;
@@ -2939,6 +3135,26 @@ export interface operations {
             };
         };
     };
+    export_config_api_export_config_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportConfigView"];
+                };
+            };
+        };
+    };
     export_api_clips__id__exports_post: {
         parameters: {
             query?: never;
@@ -2952,6 +3168,37 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_export_api_exports__id__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

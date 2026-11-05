@@ -1,3 +1,4 @@
+require('./register-ts.cjs');
 const fs=require('fs'),path=require('path'),Module=require('module'),assert=require('node:assert/strict');
 const ts=require('../apps/web/node_modules/typescript'),f=path.resolve(__dirname,'../apps/web/src/sourceRanges.ts'),m=new Module(f,module);m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,f);
 const {sourceRanges,rangeLabel,exclusionPrompt}=m.exports,plan=(...ranges)=>({segments:ranges.map(([start,end])=>({source_in:start,duration:end-start}))});

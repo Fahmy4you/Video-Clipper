@@ -1,3 +1,4 @@
+require('./register-ts.cjs');
 const fs=require('fs'),path=require('path'),assert=require('node:assert/strict'),Module=require('module');
 const ts=require('../apps/web/node_modules/typescript');
 const filename=path.resolve(__dirname,'../apps/web/src/editorModel.ts'),m=new Module(filename,module);

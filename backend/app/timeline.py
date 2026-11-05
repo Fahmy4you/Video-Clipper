@@ -71,9 +71,12 @@ class Fade(Strict):
     span:int=Field(default=0,ge=0)
     offset:int=Field(default=0,ge=0)
 class Transition(Strict):
-    kind:Literal['black','crossfade','none']='black'
+    kind:Literal['black','crossfade','none','flash']='black'
+    sound:Literal['none','camera_shutter']='none'
+    sound_volume:float=Field(default=1,ge=0,le=1)
     frames:int=Field(default=9,ge=0,le=90)
 class Broll(Strict):
+    visual_id:str|None=Field(default=None,max_length=100)
     id:str=Field(max_length=100)
     asset_id:str=Field(max_length=36)
     start:int=Field(ge=0)
@@ -122,6 +125,23 @@ class Segment(Strict):
         ids=[x.id for x in items]
         if len(ids)!=len(set(ids)):raise ValueError('ID elemen harus unik.')
         return self
+class TimelineFilter(Strict):
+    id:str=Field(max_length=100)
+    kind:Literal['sharpen']='sharpen'
+    start:int=Field(ge=0)
+    end:int=Field(gt=0)
+    strength:int=Field(default=25,ge=0,le=100)
+    targets:list[Literal['image','podcast','broll']]=Field(default_factory=lambda:['image','podcast','broll'],max_length=3)
+    @model_validator(mode='after')
+    def valid(self):
+        if self.end<=self.start:raise ValueError('Durasi filter tidak valid.')
+        if len(self.targets)!=len(set(self.targets)):raise ValueError('Target filter harus unik.')
+        return self
+class BoundaryTransition(Strict):
+    id:str=Field(max_length=450)
+    left:str=Field(max_length=210)
+    right:str=Field(max_length=210)
+    value:Transition
 class EditPlanV2(Strict):
     version:Literal[2]=2
     fps:Literal[30]=30
@@ -129,8 +149,24 @@ class EditPlanV2(Strict):
     source_fade:Fade=Field(default_factory=Fade)
     segments:list[Segment]=Field(min_length=1,max_length=200)
     subtitle_style:VisualStyle=Field(default_factory=VisualStyle)
+    transition_version:Literal[1]|None=None
+    transitions:list[BoundaryTransition]=Field(default_factory=list,max_length=1000)
+    filters:list[TimelineFilter]=Field(default_factory=list,max_length=100)
     @model_validator(mode='after')
     def unique(self):
+        keys=[t.id for t in self.transitions]
+        if len(keys)!=len(set(keys)):raise ValueError('ID transisi harus unik.')
+        if any(t.id!=t.left+'|'+t.right for t in self.transitions):raise ValueError('Referensi transisi tidak valid.')
+        if self.transition_version==1:
+            from .boundaries import boundaries,spans
+            visible=[x['key'] for x in spans(self.model_dump()) if x['kind']=='broll']
+            if len(visible)!=len(set(visible)):raise ValueError('Identitas sisipan harus berkesinambungan.')
+            valid={e['id'] for e in boundaries(self.model_dump())}
+            if any(t.id not in valid for t in self.transitions):raise ValueError('Transisi menunjuk pertemuan video yang tidak tersedia.')
+        duration=sum(s.duration for s in self.segments)
+        if any(f.end>duration for f in self.filters):raise ValueError('Filter melampaui durasi highlight.')
+        filter_ids=[f.id for f in self.filters]
+        if len(filter_ids)!=len(set(filter_ids)):raise ValueError('ID filter harus unik.')
         ids=[s.id for s in self.segments]
         if len(ids)!=len(set(ids)):raise ValueError('ID potongan harus unik.')
         return self

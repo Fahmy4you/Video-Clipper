@@ -50,6 +50,20 @@ Subtitle highlight: [akurasi, tinjauan koreksi, dan mode per kata](docs/SUBTITLE
 
 ### Kualitas preview sisipan dan waktu sumber
 
-Studio menyediakan **Sisipan: Ringan / Tajam**. Ringan menggunakan proxy; Tajam memutar file asli hanya di sekitar playhead. Preferensi tersimpan di browser dan tidak mengubah ekspor atau edit. Format yang tidak didukung browser (misalnya HEVC pada sebagian browser) kembali memakai proxy dengan pemberitahuan. Ekspor tetap membaca sumber asli. Fill dapat memperbesar/crop video; Fit mempertahankan seluruh gambar. Hasil render preview diberi label resolusi yang lebih rendah daripada ekspor.
+Studio menyediakan **Rendering ringan / Rendering berat — preview lebih detail**. Rendering ringan menggunakan proxy; rendering berat memutar file asli hanya di sekitar playhead. Preferensi tersimpan di browser dan tidak mengubah ekspor atau edit. Format yang tidak didukung browser (misalnya HEVC pada sebagian browser) kembali memakai proxy dengan pemberitahuan. Ekspor tetap membaca sumber asli. Fill dapat memperbesar/crop video; Fit mempertahankan seluruh gambar. Hasil render preview diberi label resolusi yang lebih rendah daripada ekspor.
 
 Kartu highlight menampilkan rentang YouTube berdasarkan edit tersimpan. Rentang bersambung digabung, bagian yang dibuang tetap menjadi celah. Menu **Salin batasan waktu** menghasilkan petunjuk untuk prompt proyek berikutnya; kartu dengan lebih dari dua rentang menyediakan daftar lengkap.
+
+### Kilatan dan suara transisi
+
+Dock kanan sisipan menyediakan animasi **Kilatan** dan suara **Camera shutter** secara terpisah untuk transisi masuk/keluar. Pusat audio berada tepat pada cut; durasi audio tidak berubah mengikuti durasi animasi. Lihat [petunjuk efek transisi](docs/TRANSITION_EFFECTS.md).
+
+### Filter Tajam pada timeline
+
+Tombol **Filter** menambahkan blok Tajam yang mengikuti waktu highlight, dengan slider kekuatan serta target Gambar, Video Podcast, dan Video Sisipan. Filter ikut diekspor dan berbeda dari pilihan rendering preview. Lihat [petunjuk filter dan preview](docs/FILTERS.md).
+
+### Ekspor dan transisi antar-potongan
+
+Pengaturan ekspor developer memakai `EXPORT_MODE` (default `global`) dan `EXPORT_LOCAL_DIR` di root `.env`. Mode Global menyediakan tombol **Unduh MP4**; Local menyalin hasil otomatis ke folder yang sudah ada. Restart backend dan worker setelah mengubah konfigurasi. Lihat [penyimpanan ekspor dan transisi](docs/EXPORTS_AND_CUTS.md).
+
+Klik kotak pada batas track Video untuk mengatur transisi podcast maupun sisipan. Split dan trim video minimal satu detik di kedua hasil; elemen audio, teks, subtitle, gambar, dan filter tetap mengikuti ketelitian frame.

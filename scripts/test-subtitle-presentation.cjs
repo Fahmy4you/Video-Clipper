@@ -1,3 +1,4 @@
+require('./register-ts.cjs');
 const fs=require('fs'),path=require('path'),Module=require('module'),assert=require('node:assert/strict'),cp=require('child_process');
 const root=path.resolve(__dirname,'..'),ts=require('../apps/web/node_modules/typescript'),filename=path.join(root,'apps/web/src/subtitlePresentation.ts'),m=new Module(filename,module);
 m._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,filename);

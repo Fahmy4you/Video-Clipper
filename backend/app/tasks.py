@@ -133,8 +133,23 @@ def process_job(job_id):
         elif kind in ('preview','export'):
             out=folder/f'{job_id}.mp4'
             update(job_id,stage='Merender video',progress=15)
-            render_v2(folder/'source.mp4',upgrade_plan(payload['plan']),out,kind=='preview',lambda:check(job_id),payload.get('aspect_ratio','9:16'))
-            result={'url':f'/api/media/{pid}/{out.name}','revision':payload['revision']}
+            from .export_delivery import validate,deliver,filename
+            delivery=payload.get('delivery',{'mode':'global'})
+            if kind=='export':validate(delivery)
+            with Session() as session:checkpoint=session.get(Job,job_id).checkpoint or {}
+            render_id=checkpoint.get('render_job_id',job_id)
+            rendered=folder/f'{render_id}.mp4'
+            if not checkpoint.get('render_complete') or not rendered.is_file():
+                rendered=out;render_id=job_id
+                render_v2(folder/'source.mp4',upgrade_plan(payload['plan']),out,kind=='preview',lambda:check(job_id),payload.get('aspect_ratio','9:16'))
+                with Session() as session:
+                    record=session.get(Job,job_id);record.checkpoint={**(record.checkpoint or {}),'render_complete':True,'render_job_id':job_id};session.commit()
+            result={'url':f'/api/media/{pid}/{rendered.name}','revision':payload['revision'],'render_job_id':render_id}
+            if kind=='export':
+                update(job_id,stage='Menyimpan ekspor',progress=95)
+                try:result.update(deliver(rendered,delivery,filename(payload.get('title','highlight'),payload['revision'],render_id),lambda:check(job_id)))
+                except (OSError,ValueError) as e:raise RuntimeError('Penyimpanan ekspor gagal: '+str(e)) from e
+                result['download_url']=f'/api/exports/{job_id}/download'
         else:
             result=analyze(job_id,pid,url,folder,payload.get('gemini_model'),payload.get('highlight_count',3),payload.get('additional_prompt',''))
         if kind=='analysis' and payload.get('visual_mode')=='mix':

@@ -28,6 +28,8 @@ async def sanitized_validation(request,exc):
 from .hashtag_api import router as hashtag_router
 from .video_library import router as library_router,snapshot as library_snapshot,folder as library_folder,lock_plan_assets,live_job_payload
 from .instansi_api import router as instansi_router,resolve_instansi
+from .transition_effects import router as transition_effects_router
+app.include_router(transition_effects_router)
 app.include_router(instansi_router)
 app.include_router(library_router)
 app.include_router(hashtag_router)
@@ -202,8 +204,11 @@ def analysis(id:str,s:DBSession=Depends(session)):
     if not p.gemini_model: raise HTTPException(422,'Pilih model Gemini untuk proyek ini terlebih dahulu.')
     validate_model(p.gemini_model)
     return enqueue(s,id,'analysis',payload=analysis_payload(s,p))
-def validate_plan(plan,project):
+def validate_plan(plan,project,previous=None):
     v2=upgrade_plan(plan.model_dump())
+    from .boundaries import validate_minimum
+    try:validate_minimum(v2,previous)
+    except ValueError as e:raise HTTPException(422,str(e))
     if any(x['source_in']+x['duration']>round(project.duration*30) for x in v2['segments']):raise HTTPException(422,'Clip melebihi durasi sumber.')
     for segment in v2['segments']:
         for item in segment.get('broll',[]):
@@ -233,14 +238,45 @@ def save_clip(id:str,body:ClipUpdate,s:DBSession=Depends(session)):
     if c.revision!=body.revision: raise HTTPException(409,'Clip sudah berubah. Muat ulang sebelum menyimpan.')
     p=get(s,Project,c.project_id)
     lock_plan_assets(s,body.plan.model_dump())
-    validate_plan(body.plan,p)
-    c.title=body.title; c.plan=upgrade_plan(body.plan.model_dump()); c.revision+=1; s.commit(); return serialize(c)
+    validate_plan(body.plan,p,c.plan)
+    from .boundaries import normalize
+    incoming=body.plan.model_dump()
+    if c.plan.get('transition_version')==1 and incoming.get('transition_version')!=1:raise HTTPException(409,'Versi editor lama. Muat ulang sebelum menyimpan transisi.')
+    if c.plan.get('transition_version')!=1:
+        if c.legacy_plan is None:c.legacy_plan=c.plan
+        backups=project_dir(c.project_id)/'plan-backups';backups.mkdir(exist_ok=True)
+        try:
+            with (backups/f'{c.id}-r{c.revision}-transitions.json').open('x') as backup:json.dump(c.plan,backup,ensure_ascii=False)
+        except FileExistsError:pass
+    c.title=body.title; c.plan=normalize(upgrade_plan(incoming)); c.revision+=1; s.commit(); return serialize(c)
 @app.post('/api/clips/{id}/preview',status_code=202)
 def preview(id:str,s:DBSession=Depends(session)):
     c=get(s,Clip,id); return enqueue(s,c.project_id,'preview',c.id,{'plan':c.plan,'revision':c.revision,'aspect_ratio':get(s,Project,c.project_id).aspect_ratio})
+from .export_delivery import ExportConfigView
+
+@app.get('/api/export-config',response_model=ExportConfigView)
+def export_config():
+    from .export_delivery import config_view
+    return config_view()
+
 @app.post('/api/clips/{id}/exports',status_code=202)
 def export(id:str,s:DBSession=Depends(session)):
-    c=get(s,Clip,id); return enqueue(s,c.project_id,'export',c.id,{'plan':c.plan,'revision':c.revision,'aspect_ratio':get(s,Project,c.project_id).aspect_ratio})
+    from .export_delivery import config_snapshot
+    try:delivery=config_snapshot()
+    except (ValueError,OSError) as e:raise HTTPException(422,str(e))
+    c=get(s,Clip,id)
+    return enqueue(s,c.project_id,'export',c.id,{'plan':c.plan,'revision':c.revision,'title':c.title,'delivery':delivery,'aspect_ratio':get(s,Project,c.project_id).aspect_ratio})
+
+@app.get('/api/exports/{id}/download')
+def download_export(id:str,s:DBSession=Depends(session)):
+    from .export_delivery import filename
+    j=get(s,Job,id)
+    if j.kind!='export' or j.status!='succeeded':raise HTTPException(404,'Ekspor belum tersedia.')
+    f=project_dir(j.project_id)/(str(UUID(j.result.get('render_job_id',j.id)))+'.mp4')
+    if not f.is_file():raise HTTPException(404,'File ekspor tidak ditemukan.')
+    name=j.result.get('filename') or filename(j.payload.get('title','highlight'),j.payload.get('revision',1),j.id)
+    return FileResponse(f,media_type='video/mp4',filename=name)
+
 @app.get('/api/jobs/{id}',response_model=JobView)
 @app.get('/api/exports/{id}',response_model=JobView)
 def job(id:str,s:DBSession=Depends(session)): return public_job(s,get(s,Job,id))

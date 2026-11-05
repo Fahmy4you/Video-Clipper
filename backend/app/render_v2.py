@@ -5,7 +5,9 @@ from PIL import Image,ImageDraw,ImageFont
 from .media import run,probe
 from .timeline import RESOLUTIONS,EditPlanV2
 from .config import ROOT
+from .visual_filters import ffmpeg_filters,sharpen_image,strength_at
 from .mix_render import composite,fade_expr
+from .transition_effects import global_items,flashes,plan_flashes,flash_field,sound_windows,ASSETS
 
 FONTS={'DejaVu Sans':ROOT/'apps/web/public/fonts/EditorDejaVu.ttf','Liberation Sans':ROOT/'apps/web/public/fonts/EditorLiberation.ttf','Poppins':ROOT/'apps/web/public/fonts/Poppins-SemiBold.ttf'}
 def text_image(text,style,w,h,words=None,frame=0,scale=1):
@@ -33,8 +35,14 @@ def text_image(text,style,w,h,words=None,frame=0,scale=1):
     if style['opacity']!=1:canvas.putalpha(canvas.getchannel('A').point(lambda p:round(p*style['opacity'])))
     return canvas
 
-def overlay_image(segment,global_style,frame,w,h,folder):
+def overlay_image(segment,global_style,frame,w,h,folder,flash_events=(),absolute_frame=None,filters=()):
     canvas=Image.new('RGBA',(w,h));items=[]
+    f=frame if absolute_frame is None else absolute_frame
+    for event in flash_events:
+        half=event['half']
+        if half and event['frame']-half<=f<=event['frame']+half:
+            strip=Image.frombytes('RGBA',(96,64),flash_field((f-event['frame']+half)/(2*half)))
+            canvas.alpha_composite(strip.resize((w,h),Image.Resampling.BILINEAR))
     for c in segment['captions']:
         if c['start']<=frame<c['end']:items.append((0,c))
     for item in segment['overlays']:
@@ -47,7 +55,8 @@ def overlay_image(segment,global_style,frame,w,h,folder):
             im=im.resize((max(1,round(style['width']*w)),max(1,round(style['height']*h))),Image.Resampling.LANCZOS)
             if style['rotation']:im=im.rotate(-style['rotation'],expand=True,resample=Image.Resampling.BICUBIC)
             if style['opacity']!=1:im.putalpha(im.getchannel('A').point(lambda p:round(p*style['opacity'])))
-            canvas.alpha_composite(im,(round(style['x']*w-im.width/2),round(style['y']*h-im.height/2)))
+            layer=Image.new('RGBA',(w,h));layer.alpha_composite(im,(round(style['x']*w-im.width/2),round(style['y']*h-im.height/2)))
+            canvas.alpha_composite(sharpen_image(layer,strength_at(filters,'image',f)))
         else:
             words=item.get('words');scale=1
             if words is not None:
@@ -58,9 +67,16 @@ def overlay_image(segment,global_style,frame,w,h,folder):
     return canvas
 
 def overlay_movie(plan,work,w,h,folder,check):
-    files=[];index=0
+    files=[];index=0;offset=0
+    items,duration=global_items(plan);flash_events=plan_flashes(plan)
     for segment in plan['segments']:
         points={0,segment['duration']}
+        for flt in plan.get('filters',[]):
+            if 'image' in flt['targets']:
+                points.update(max(0,min(segment['duration'],f-offset)) for f in (flt['start'],flt['end']))
+        for e in flash_events:
+            if e['half']:
+                points.update(f-offset for f in range(max(offset,e['frame']-e['half']),min(offset+segment['duration'],e['frame']+e['half'])+1))
         for c in segment['captions']:
             from .subtitle_presentation import change_points
             points.update(change_points(c,c.get('style') or plan['subtitle_style']))
@@ -68,18 +84,23 @@ def overlay_movie(plan,work,w,h,folder,check):
         points=sorted(points)
         for a,b in zip(points,points[1:]):
             check();p=work/f'overlay-{index:05}.png';index+=1
-            overlay_image(segment,plan['subtitle_style'],a,w,h,folder).save(p)
+            overlay_image(segment,plan['subtitle_style'],a,w,h,folder,flash_events,a+offset,plan.get('filters',[])).save(p)
             files.extend([f"file '{p.resolve()}'",'option framerate 30',f'duration {(b-a)/30:.12f}'])
+        offset+=segment['duration']
     files.extend([files[-3],'option framerate 30']);listing=work/'overlays.txt';listing.write_text('\n'.join(files))
     out=work/'overlays.mov'
     run(['ffmpeg','-y','-v','error','-threads','2','-f','concat','-safe','0','-i',str(listing),'-vf','fps=30','-frames:v',str(sum(s['duration'] for s in plan['segments'])),'-c:v','qtrle','-threads','2','-pix_fmt','argb',str(out)],check)
     return out
 
 def render_v2(source,plan,out,preview=False,check=lambda:None,ratio='9:16'):
-    plan=EditPlanV2.model_validate(plan).model_dump();w,h=RESOLUTIONS[ratio]
-    if preview:w,h=round(w/3/2)*2,round(h/3/2)*2
+    from .boundaries import normalize
+    plan=normalize(EditPlanV2.model_validate(plan).model_dump());w,h=RESOLUTIONS[ratio]
+    target_w,target_h=w,h
+    filtered=any(f['strength'] and f['targets'] for f in plan['filters'])
+    if preview and not filtered:w,h=round(w/3/2)*2,round(h/3/2)*2
     work=out.parent/(out.stem+'-work');work.mkdir(exist_ok=True);parts=[]
     info=probe(source);audio=any(x['codec_type']=='audio' for x in info['streams'])
+    segment_offset=0
     for i,s in enumerate(plan['segments']):
         check();t=s['transform'];ph=h//2 if t['mode']=='split' else h
         def pane(x):
@@ -90,6 +111,9 @@ def render_v2(source,plan,out,preview=False,check=lambda:None,ratio='9:16'):
         base='fps=30,setpts=PTS-STARTPTS'
         if t['mode']=='split':vf=f'[0:v]{base},split=2[a][b];[a]{pane(t["x"])}[top];[b]{pane(t["b"])}[bottom];[top][bottom]vstack[v]'
         else:vf=f'[0:v]{base},{pane(t["x"])}[v]'
+        chain=ffmpeg_filters(plan['filters'],'podcast',segment_offset)
+        if chain:vf=vf.replace('[v]','[vraw]')+';[vraw]'+chain+'[v]'
+        segment_offset+=s['duration']
         dur=s['duration']/30;target=work/f'{i:03}.mkv'
         args=['ffmpeg','-y','-v','error','-threads','2','-ss',str(s['source_in']/30),'-i',str(source)]
         if not audio:args+=['-f','lavfi','-i','anullsrc=r=48000:cl=stereo']
@@ -105,7 +129,15 @@ def render_v2(source,plan,out,preview=False,check=lambda:None,ratio='9:16'):
         offset=0;items=[]
         for segment in plan['segments']:
             items.extend({**b,'start':b['start']+offset,'end':b['end']+offset} for b in segment['broll']);offset+=segment['duration']
-        visual_base=composite(joined,{'duration':offset,'broll':items},work/'mixed.mkv',w,h,check)
+        if plan.get('transition_version')==1:
+            items=[dict(b,transition_in={'kind':'none','frames':0},transition_out={'kind':'none','frames':0}) for b in items]
+        visual_base=composite(joined,{'duration':offset,'broll':items,'filters':plan['filters']},work/'mixed.mkv',w,h,check)
+    if plan.get('transition_version')==1:
+        from .boundary_render import apply
+        if visual_base is None:
+            visual_base=work/'joined.mkv'
+            run(['ffmpeg','-y','-v','error','-f','concat','-safe','0','-i',str(listing),'-c','copy',str(visual_base)],check)
+        visual_base=apply(visual_base,source,plan,work/'transitioned.mkv',w,h,round(float(info['format']['duration'])*30),check)
     inputs=[];filters=[f'[0:v]fps=30,settb=1/30,setpts=N,tpad=stop_mode=clone:stop_duration=0.1,trim=end_frame={round(duration*30)}[basevideo];[basevideo][1:v]overlay=eof_action=repeat:format=auto,format=yuv420p[v]',f"[0:a]volume='{plan['source_volume']}*({fade_expr(plan['source_fade'],round(duration*30))})':eval=frame[baseaudio]"];labels=['[baseaudio]'];offset=0
     from uuid import UUID
     for segment in plan['segments']:
@@ -116,6 +148,17 @@ def render_v2(source,plan,out,preview=False,check=lambda:None,ratio='9:16'):
             a=item['source_in']/30;b=(item['source_in']+item['end']-item['start'])/30;delay=round((offset+item['start'])*1000/30)
             filters.append(f"[{index}:a]atrim=start={a}:end={b},asetpts=PTS-STARTPTS,volume='{item['volume']}*({fade_expr(item['fade'],item['end']-item['start'])})':eval=frame,adelay={delay}:all=1[{label}]");labels.append(f'[{label}]')
         offset+=segment['duration']
+    windows=sound_windows(plan)
+    if windows:
+        index=2+len(inputs)//2;inputs+=['-i',str(ASSETS/'camera_shutter.wav')]
+        filters.append(f'[{index}:a]asplit={len(windows)}'+''.join(f'[shutter{i}]' for i in range(len(windows))))
+        for i,event in enumerate(windows):
+            label=f'sfx{i}'
+            filters.append(f"[shutter{i}]atrim=start_sample={event['skip']}:end_sample={event['skip']+event['length']},asetpts=PTS-STARTPTS,volume={event['volume']},adelay={event['start']}S:all=1[{label}]")
+            labels.append(f'[{label}]')
+    if preview and filtered:
+        rw,rh=round(target_w/3/2)*2,round(target_h/3/2)*2
+        filters[0]=filters[0].replace('format=yuv420p[v]',f'format=yuv420p,scale={rw}:{rh}[v]')
     filters.append(''.join(labels)+f'amix=inputs={len(labels)}:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.98:level=0:latency=1,apad,atrim=duration={duration}[audioout]')
     run(['ffmpeg','-y','-v','error','-threads','2',*(['-i',str(visual_base)] if visual_base else ['-f','concat','-safe','0','-i',str(listing)]),'-i',str(overlays),*inputs,'-filter_complex_threads','1','-filter_complex',';'.join(filters),'-map','[v]','-map','[audioout]','-t',str(duration),'-c:v','libx264','-threads','2','-preset','veryfast','-crf','25' if preview else '20','-c:a','aac','-b:a','160k','-movflags','+faststart',str(tmp)],check)
     tmp.replace(out);shutil.rmtree(work)

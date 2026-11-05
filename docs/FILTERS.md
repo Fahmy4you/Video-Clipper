@@ -1,0 +1,11 @@
+# Filter timeline, kualitas preview, dan Kilatan lembut
+
+Tombol **Filter** di dock kiri menambah preset Tajam pada playhead: tiga detik, kekuatan 25%, dan target Gambar/Video Podcast/Video Sisipan tercentang. Pilih blok pada track Filter untuk mengubah kekuatan, rentang, dan target di dock kanan. Filter mengubah hasil ekspor, sedangkan **Proxy / Asli** hanya memilih media preview sisipan. Penajaman mempertegas detail, bukan menambah resolusi.
+
+Filter tetap pada waktu highlight saat potongan di-reorder/trim/dihapus. Ujung filter dipotong bila highlight memendek; filter di luar durasi dibuang. Split podcast tidak membelah filter; Split dengan filter terpilih membagi blok. Duplikat berada pada rentang yang sama. Kekuatan tertinggi dipakai per target jika beberapa filter bertumpuk. Target kosong atau kekuatan nol tidak memberi efek. Seluruh operasi mengikuti autosave, konflik revisi, dan undo/redo.
+
+EditPlan v2 memiliki daftar `filters` global: `id`, `kind=sharpen`, `start`, `end` (frame 30 fps), `strength` (0–100), dan `targets` (`image`, `podcast`, `broll`). Plan lama memakai daftar kosong, tanpa migrasi database. Snapshot render menyimpan plan yang sama. Penajaman RGB memakai Gaussian 3×3 dan mempertahankan alpha. Preview GPU tanpa readback memakai kernel yang sama dengan backend; jalur CPU dibatasi 10 pembaruan per detik saat playback dan tetap tepat saat pause. Filter dikerjakan per kategori sebelum komposisi, bukan pada subtitle, teks atau cahaya transisi. Render preview diturunkan setelah filter pada resolusi proyek.
+
+Decoder sisipan mempertahankan sumber lama selama pergantian kualitas. Bila frame aktif belum siap, kanvas mempertahankan frame komposit terakhir dan playback/audio dijeda bersama. Sumber Asli yang gagal atau macet lima detik kembali ke Proxy untuk sesi editor tersebut. Prefetch dibatasi pada sisipan aktif dan sekitar titik transisi. Kilatan memakai gradasi krem-peach dua dimensi dengan opacity maksimum 60%, tetap terpusat waktunya pada cut.
+
+Validasi: `node scripts/test-visual-filters.cjs`, `node scripts/test-transition-effects.cjs`, dan `pytest backend/tests/test_visual_filters.py`. Pemeriksaan mencakup kesetaraan kernel, alpha transparan, batas waktu, maksimum per target, serta render nyata pada ketiga kategori.

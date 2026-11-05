@@ -2,6 +2,7 @@
 import json,math
 from .video_library import folder
 from .media import run
+from .visual_filters import ffmpeg_filters
 
 def fade_expr(fade,length):
     span=fade.get('span') or length;offset=fade.get('offset',0);a=min(fade.get('in_frames',0),span);b=min(fade.get('out_frames',0),span)
@@ -24,9 +25,12 @@ def composite(base,segment,out,w,h,check):
     filters=['[0:v]fps=30,settb=1/30,setpts=N,format=yuv420p[base]'];current='base';duration=segment['duration']
     for idx,item in enumerate(items,1):
         root=folder(item['asset_id']);meta=json.loads((root/'metadata.json').read_text());(ki,hi),(ko,ho)=limits(item,items,duration,meta['frames'])
+        hi=0 if ki=='flash' else hi;ho=0 if ko=='flash' else ho
         pre=min(item['source_in'],math.ceil(hi));src=(item['source_in']-pre)/30;delay=(item['start']-pre)/30
         args+=['-ss',str(src),'-i',str(root/'source.media')];t=item['transform'];scale=t['scale'];mode='decrease' if t['mode']=='fit' else 'increase'
         vf=f"fps=30,settb=1/30,setpts=N,scale={round(w*scale/2)*2}:{round(h*scale/2)*2}:force_original_aspect_ratio={mode}:force_divisible_by=2,pad=max(iw\\,{w}):max(ih\\,{h}):(ow-iw)*{t['x']}:(oh-ih)*{t['y']}:black,crop={w}:{h}:(iw-ow)*{t['x']}:(ih-oh)*{t['y']},setsar=1,tpad=start_duration={delay}:start_mode=clone:stop_duration={duration/30}:stop_mode=clone,trim=duration={duration/30},settb=1/30,setpts=N,format=yuva420p"
+        chain=ffmpeg_filters(segment.get('filters',[]),'broll')
+        if chain:vf+=','+chain+',format=yuva420p'
         a=item['start'];b=item['end']
         # Native alpha fades are evaluated once per frame, rather than a complex
         # expression for every RGB pixel. Black mattes affect only the base image.
