@@ -259,13 +259,17 @@ def export_config():
     from .export_delivery import config_view
     return config_view()
 
+from .export_options import ExportRequest,dimensions,RENDER_VERSION
+
 @app.post('/api/clips/{id}/exports',status_code=202)
-def export(id:str,s:DBSession=Depends(session)):
+def export(id:str,body:ExportRequest=ExportRequest(),s:DBSession=Depends(session)):
     from .export_delivery import config_snapshot
     try:delivery=config_snapshot()
     except (ValueError,OSError) as e:raise HTTPException(422,str(e))
     c=get(s,Clip,id)
-    return enqueue(s,c.project_id,'export',c.id,{'plan':c.plan,'revision':c.revision,'title':c.title,'delivery':delivery,'aspect_ratio':get(s,Project,c.project_id).aspect_ratio})
+    ratio=get(s,Project,c.project_id).aspect_ratio
+    width,height=dimensions(ratio,body.resolution)
+    return enqueue(s,c.project_id,'export',c.id,{'resolution':body.resolution,'width':width,'height':height,'render_version':RENDER_VERSION,'plan':c.plan,'revision':c.revision,'title':c.title,'delivery':delivery,'aspect_ratio':get(s,Project,c.project_id).aspect_ratio})
 
 @app.get('/api/exports/{id}/download')
 def download_export(id:str,s:DBSession=Depends(session)):

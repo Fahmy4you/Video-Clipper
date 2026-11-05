@@ -47,11 +47,12 @@ def config_view():
     except (ValueError,OSError) as e:error=str(e)
     return {**config,"local_dir":config["local_dir"] or None,"ready":error is None,"error":error}
 
-def filename(title,revision,job_id):
+def filename(title,revision,job_id,resolution=None):
     text=unicodedata.normalize("NFKC",title)
     text=re.sub(r'[<>:"/\\|?*\x00-\x1f]',"-",text).strip(" .")[:100] or "highlight"
     text=text.encode("utf-8")[:120].decode("utf-8","ignore").rstrip(" .") or "highlight"
-    return f"{text}-r{revision}-{job_id}.mp4"
+    quality=f"-{resolution}p" if resolution else ""
+    return f"{text}{quality}-r{revision}-{job_id}.mp4"
 
 def display_path(config,path,name):
     value=config.get("local_dir","")

@@ -132,23 +132,29 @@ def process_job(job_id):
             result=prepare_editor(folder,lambda:check(job_id))
         elif kind in ('preview','export'):
             out=folder/f'{job_id}.mp4'
-            update(job_id,stage='Merender video',progress=15)
+            update(job_id,stage=f"Mengekspor {payload.get('resolution',1080)}p" if kind=='export' else 'Merender video',progress=15)
             from .export_delivery import validate,deliver,filename
             delivery=payload.get('delivery',{'mode':'global'})
             if kind=='export':validate(delivery)
             with Session() as session:checkpoint=session.get(Job,job_id).checkpoint or {}
             render_id=checkpoint.get('render_job_id',job_id)
             rendered=folder/f'{render_id}.mp4'
-            if not checkpoint.get('render_complete') or not rendered.is_file():
+            from .export_options import render_identity
+            identity=render_identity(folder/'source.mp4',upgrade_plan(payload['plan']),payload.get('aspect_ratio','9:16'),360 if kind=='preview' else payload.get('resolution',1080))
+            reusable=checkpoint.get('render_identity')==identity or 'resolution' not in payload and not checkpoint.get('render_identity')
+            if not reusable or not checkpoint.get('render_complete') or not rendered.is_file():
                 rendered=out;render_id=job_id
-                render_v2(folder/'source.mp4',upgrade_plan(payload['plan']),out,kind=='preview',lambda:check(job_id),payload.get('aspect_ratio','9:16'))
+                render_v2(folder/'source.mp4',upgrade_plan(payload['plan']),out,kind=='preview',lambda:check(job_id),payload.get('aspect_ratio','9:16'),resolution=payload.get('resolution',1080),progress=lambda stage,value:update(job_id,stage=(str(payload.get('resolution',1080))+'p · ' if kind=='export' else '')+stage,progress=value))
                 with Session() as session:
-                    record=session.get(Job,job_id);record.checkpoint={**(record.checkpoint or {}),'render_complete':True,'render_job_id':job_id};session.commit()
+                    record=session.get(Job,job_id);record.checkpoint={**(record.checkpoint or {}),'render_complete':True,'render_job_id':job_id,'render_identity':identity};session.commit()
             result={'url':f'/api/media/{pid}/{rendered.name}','revision':payload['revision'],'render_job_id':render_id}
             if kind=='export':
                 update(job_id,stage='Menyimpan ekspor',progress=95)
-                try:result.update(deliver(rendered,delivery,filename(payload.get('title','highlight'),payload['revision'],render_id),lambda:check(job_id)))
+                try:result.update(deliver(rendered,delivery,filename(payload.get('title','highlight'),payload['revision'],render_id,payload.get('resolution')),lambda:check(job_id)))
                 except (OSError,ValueError) as e:raise RuntimeError('Penyimpanan ekspor gagal: '+str(e)) from e
+                from .export_options import dimensions
+                width,height=dimensions(payload.get('aspect_ratio','9:16'),payload.get('resolution',1080))
+                result.update(resolution=payload.get('resolution',1080),width=width,height=height)
                 result['download_url']=f'/api/exports/{job_id}/download'
         else:
             result=analyze(job_id,pid,url,folder,payload.get('gemini_model'),payload.get('highlight_count',3),payload.get('additional_prompt',''))

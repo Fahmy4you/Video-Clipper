@@ -66,8 +66,8 @@ def overlay_image(segment,global_style,frame,w,h,folder,flash_events=(),absolute
             canvas.alpha_composite(text_image(item.get('text',''),style,w,h,words,frame,scale))
     return canvas
 
-def overlay_movie(plan,work,w,h,folder,check):
-    files=[];index=0;offset=0
+def overlay_movie(plan,work,w,h,folder,check,output_size=None,progress=lambda value:None):
+    files=[];index=0;offset=0;previous_percent=-1
     items,duration=global_items(plan);flash_events=plan_flashes(plan)
     for segment in plan['segments']:
         points={0,segment['duration']}
@@ -83,8 +83,12 @@ def overlay_movie(plan,work,w,h,folder,check):
         for o in segment['overlays']:points.update((o['start'],o['end']))
         points=sorted(points)
         for a,b in zip(points,points[1:]):
-            check();p=work/f'overlay-{index:05}.png';index+=1
-            overlay_image(segment,plan['subtitle_style'],a,w,h,folder,flash_events,a+offset,plan.get('filters',[])).save(p)
+            check();percent=round((offset+a)/duration*100)
+            if percent!=previous_percent:progress(percent);previous_percent=percent
+            p=work/f'overlay-{index:05}.png';index+=1
+            image=overlay_image(segment,plan['subtitle_style'],a,w,h,folder,flash_events,a+offset,plan.get('filters',[]))
+            if output_size and output_size!=(w,h):image=image.resize(output_size,Image.Resampling.LANCZOS)
+            image.save(p)
             files.extend([f"file '{p.resolve()}'",'option framerate 30',f'duration {(b-a)/30:.12f}'])
         offset+=segment['duration']
     files.extend([files[-3],'option framerate 30']);listing=work/'overlays.txt';listing.write_text('\n'.join(files))
@@ -92,17 +96,19 @@ def overlay_movie(plan,work,w,h,folder,check):
     run(['ffmpeg','-y','-v','error','-threads','2','-f','concat','-safe','0','-i',str(listing),'-vf','fps=30','-frames:v',str(sum(s['duration'] for s in plan['segments'])),'-c:v','qtrle','-threads','2','-pix_fmt','argb',str(out)],check)
     return out
 
-def render_v2(source,plan,out,preview=False,check=lambda:None,ratio='9:16'):
+def render_v2(source,plan,out,preview=False,check=lambda:None,ratio='9:16',resolution=1080,progress=lambda stage,value:None):
     from .boundaries import normalize
     plan=normalize(EditPlanV2.model_validate(plan).model_dump());w,h=RESOLUTIONS[ratio]
     target_w,target_h=w,h
+    from .export_options import dimensions
+    output_w,output_h=dimensions(ratio,360 if preview else resolution)
     filtered=any(f['strength'] and f['targets'] for f in plan['filters'])
-    if preview and not filtered:w,h=round(w/3/2)*2,round(h/3/2)*2
+    if not filtered:w,h=output_w,output_h
     work=out.parent/(out.stem+'-work');work.mkdir(exist_ok=True);parts=[]
     info=probe(source);audio=any(x['codec_type']=='audio' for x in info['streams'])
     segment_offset=0
     for i,s in enumerate(plan['segments']):
-        check();t=s['transform'];ph=h//2 if t['mode']=='split' else h
+        check();progress('Menyiapkan potongan video',15+round(i/max(1,len(plan['segments']))*15));t=s['transform'];ph=h//2 if t['mode']=='split' else h
         def pane(x):
             mode='decrease' if t['mode']=='fit' else 'increase'
             sw=math.ceil(w*t['scale']/2)*2;sh=math.ceil(ph*t['scale']/2)*2
@@ -121,7 +127,9 @@ def render_v2(source,plan,out,preview=False,check=lambda:None,ratio='9:16'):
         args+=['-filter_complex_threads','1','-filter_complex',vf,'-map','[v]','-map','[aout]','-t',str(dur),'-c:v','libx264','-threads','2','-preset','veryfast','-crf','20','-pix_fmt','yuv420p','-c:a','pcm_s16le','-ar','48000','-ac','2',str(target)]
         run(args,check);parts.append(target)
     listing=work/'parts.txt';listing.write_text('\n'.join(f"file '{p.resolve()}'\nduration {s['duration']/30:.12f}" for p,s in zip(parts,plan['segments'])))
-    overlays=overlay_movie(plan,work,w,h,source.parent,check);tmp=out.with_suffix('.partial.mp4');duration=sum(s['duration'] for s in plan['segments'])/30
+    overlays=overlay_movie(plan,work,target_w,target_h,source.parent,check,output_size=(w,h),progress=lambda value:progress('Menyusun subtitle dan overlay',30+round(value*.45)))
+    tmp=out.with_suffix('.partial.mp4');duration=sum(s['duration'] for s in plan['segments'])/30
+    progress('Menyusun video dan transisi',78)
     visual_base=None
     if any(s['broll'] for s in plan['segments']):
         joined=work/'joined.mkv'
@@ -156,9 +164,10 @@ def render_v2(source,plan,out,preview=False,check=lambda:None,ratio='9:16'):
             label=f'sfx{i}'
             filters.append(f"[shutter{i}]atrim=start_sample={event['skip']}:end_sample={event['skip']+event['length']},asetpts=PTS-STARTPTS,volume={event['volume']},adelay={event['start']}S:all=1[{label}]")
             labels.append(f'[{label}]')
-    if preview and filtered:
-        rw,rh=round(target_w/3/2)*2,round(target_h/3/2)*2
+    if filtered and (output_w,output_h)!=(w,h):
+        rw,rh=output_w,output_h
         filters[0]=filters[0].replace('format=yuv420p[v]',f'format=yuv420p,scale={rw}:{rh}[v]')
+    progress('Encoding MP4',90)
     filters.append(''.join(labels)+f'amix=inputs={len(labels)}:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.98:level=0:latency=1,apad,atrim=duration={duration}[audioout]')
-    run(['ffmpeg','-y','-v','error','-threads','2',*(['-i',str(visual_base)] if visual_base else ['-f','concat','-safe','0','-i',str(listing)]),'-i',str(overlays),*inputs,'-filter_complex_threads','1','-filter_complex',';'.join(filters),'-map','[v]','-map','[audioout]','-t',str(duration),'-c:v','libx264','-threads','2','-preset','veryfast','-crf','25' if preview else '20','-c:a','aac','-b:a','160k','-movflags','+faststart',str(tmp)],check)
+    run(['ffmpeg','-y','-v','error','-threads','2',*(['-i',str(visual_base)] if visual_base else ['-f','concat','-safe','0','-i',str(listing)]),'-i',str(overlays),*inputs,'-filter_complex_threads','1','-filter_complex',';'.join(filters),'-map','[v]','-map','[audioout]','-t',str(duration),'-c:v','libx264','-threads','2','-preset','veryfast','-crf','25' if preview or resolution==360 else '20','-c:a','aac','-b:a','160k','-movflags','+faststart',str(tmp)],check)
     tmp.replace(out);shutil.rmtree(work)

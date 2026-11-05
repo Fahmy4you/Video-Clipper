@@ -1145,6 +1145,15 @@ export interface components {
             /** Error */
             error?: string | null;
         };
+        /** ExportRequest */
+        ExportRequest: {
+            /**
+             * Resolution
+             * @default 1080
+             * @enum {integer}
+             */
+            resolution: 360 | 720 | 1080;
+        };
         /** Fade */
         Fade: {
             /**
@@ -3164,7 +3173,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ExportRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             202: {

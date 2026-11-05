@@ -173,3 +173,12 @@
 .transition-boundary{position:absolute;z-index:12;width:28px;height:28px;min-height:28px;transform:translate(-50%,-50%);border:1px solid var(--line);border-radius:4px;background:var(--surface);color:var(--text);display:grid;place-items:center;padding:3px;box-shadow:0 1px 4px #0004}.transition-boundary:hover,.transition-boundary.selected{color:var(--link);border-color:var(--accent);background:var(--selection)}.boundary-sound{position:absolute;right:-3px;bottom:-3px;background:var(--surface);border-radius:2px}.broll-quality select{max-width:260px}
 
 .export-links a{overflow-wrap:anywhere;white-space:normal}.player-top .broll-quality{max-width:100%}
+
+.preview-preparation { position:absolute; inset:38px 0 34px; z-index:12; background:var(--surface,#111827); display:flex; flex-direction:column; justify-content:center; align-items:center; gap:12px; padding:24px; text-align:center; }
+.preview-preparation[hidden] { display:none; }
+.preview-preparation progress { width:min(280px,80%); }
+.export-resolution { display:grid; gap:8px; }
+.export-history { margin-top:24px; }
+.export-history summary { display:flex; align-items:center; gap:8px; cursor:pointer; }
+.export-history article { display:grid; gap:8px; padding:16px 0; border-bottom:1px solid var(--line); overflow-wrap:anywhere; }
+.export-history article .button { justify-self:start; }

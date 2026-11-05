@@ -40,3 +40,12 @@ Renderer menggabungkan visual pada 30 fps dengan transisi simetris di sekitar cu
 - node scripts/test-boundaries.cjs
 - Build frontend, seluruh regresi backend, browser desktop/laptop/mobile.
 - Periksa bounding box kanvas selama buffering, 29/30-frame split/trim, autosave/reload, undo, export/download, dan penyalinan Windows/WSL.
+
+
+## Pilihan resolusi ekspor
+
+Dialog Ekspor menyediakan 360p, 720p, dan 1080p (default). Dimensi mengikuti rasio proyek. Mode Global memulai unduhan otomatis sekali saat aplikasi terbuka. Jika selesai ketika aplikasi ditutup, gunakan tautan Unduh MP4 saat kembali atau Riwayat ekspor dalam dialog.
+
+Permintaan POST ekspor menerima JSON opsional `{"resolution":360}`. Nilai yang diterima 360, 720, 1080. Permintaan tanpa body tetap memakai 1080. Snapshot pekerjaan mempertahankan resolusi untuk retry. Mode Local menggunakan tujuan .env dan tidak memulai unduhan browser.
+
+Preview studio menyiapkan posisi masuk media di awal, memakai ulang maksimal empat decoder visual, dan menyimpan frame terpilih sampai 64 MiB. Pesan menunggu baru terlihat setelah 400 ms. Persiapan memeriksa posisi penting, lalu decoding berjalan bertahap selama playback.
