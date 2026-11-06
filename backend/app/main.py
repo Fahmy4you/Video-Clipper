@@ -11,7 +11,7 @@ from sqlalchemy import select, text, delete
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session as DBSession
 from .config import settings
-from .db import session, engine, Project, Clip, Job, Session
+from .db import session, engine, Project, Clip, Job, Session, HighlightProposal
 from .schemas import ProjectInput, ClipInput, ClipUpdate, ProjectView, ClipView, JobView, ModelSelection, ModelOption, GeminiConnectionView, ModelCatalog, CatalogRefresh
 from .media import project_dir
 from .tasks import execute, celery
@@ -33,6 +33,8 @@ app.include_router(transition_effects_router)
 app.include_router(instansi_router)
 app.include_router(library_router)
 app.include_router(hashtag_router)
+from .review import router as review_router
+app.include_router(review_router)
 from .gemini_config_api import router as gemini_config_router
 from .key_store import KeyConfigError
 app.include_router(gemini_config_router)
@@ -59,7 +61,12 @@ def serialize(obj):
         from sqlalchemy.orm import object_session
         return public_job(object_session(obj),obj)
     data={c.name:getattr(obj,c.name) for c in obj.__table__.columns if c.name not in ('request_id','request_hash')}
-    if isinstance(obj,Project):data['instansi_ids']=obj.instansi_ids
+    if isinstance(obj,Project):
+        data['instansi_ids']=obj.instansi_ids
+        from sqlalchemy.orm import object_session
+        from .review import counts
+        data['review_counts']=counts(object_session(obj),obj.id)
+    if isinstance(obj,Clip):data['instansi_ids']=obj.instansi_ids
     return data
 @app.get('/api/health')
 def health():
@@ -147,6 +154,7 @@ def delete_project(id:str,s:DBSession=Depends(session)):
     try:
         if folder.exists():folder.rename(trash);moved=True
         s.execute(delete(Job).where(Job.project_id==id))
+        s.execute(delete(HighlightProposal).where(HighlightProposal.project_id==id))
         s.execute(delete(Clip).where(Clip.project_id==id))
         s.delete(p);s.commit()
     except Exception:
@@ -169,7 +177,7 @@ def project_model(id:str,body:ModelSelection,s:DBSession=Depends(session)):
 @app.get('/api/projects/{id}/clips',response_model=list[ClipView])
 def clips(id:str,s:DBSession=Depends(session)):
     get(s,Project,id)
-    return [serialize(x) for x in s.scalars(select(Clip).where(Clip.project_id==id))]
+    return [serialize(x) for x in s.scalars(select(Clip).where(Clip.project_id==id,Clip.ready==True))]
 @app.get('/api/projects/{id}/transcript')
 def transcript(id:str,s:DBSession=Depends(session)):
     get(s,Project,id); f=project_dir(id)/'transcript.json'
@@ -196,7 +204,7 @@ def enqueue(s,pid,kind,clip=None,payload=None,checkpoint=None):
     j=add_job(s,pid,kind,clip,payload,checkpoint);s.commit();wake();return public_job(s,j)
 
 def analysis_payload(s,p):
-    return {'subtitle_mode':p.subtitle_mode,'subtitle_animation':p.subtitle_animation,'gemini_model':p.gemini_model,'aspect_ratio':p.aspect_ratio,'highlight_count':p.highlight_count,'additional_prompt':p.additional_prompt,'visual_mode':p.visual_mode,'mix_hashtags':p.mix_hashtags,'source_policy_version':1,'instansi_ids':p.instansi_ids,'include_global':p.include_global,'library':library_snapshot(s,p.mix_hashtags,p.instansi_ids,p.include_global) if p.visual_mode=='mix' else []}
+    return {'workflow':p.workflow,'subtitle_mode':p.subtitle_mode,'subtitle_animation':p.subtitle_animation,'gemini_model':p.gemini_model,'aspect_ratio':p.aspect_ratio,'highlight_count':p.highlight_count,'additional_prompt':p.additional_prompt,'visual_mode':p.visual_mode,'mix_hashtags':p.mix_hashtags,'source_policy_version':1,'instansi_ids':p.instansi_ids,'include_global':p.include_global,'library':library_snapshot(s,p.mix_hashtags,p.instansi_ids,p.include_global) if p.visual_mode=='mix' and p.workflow!='review' else []}
 
 @app.post('/api/projects/{id}/analysis',status_code=202)
 def analysis(id:str,s:DBSession=Depends(session)):
@@ -230,11 +238,19 @@ def manual_clip(id:str,body:ClipInput,s:DBSession=Depends(session)):
     p=get(s,Project,id)
     lock_plan_assets(s,body.plan.model_dump())
     validate_plan(body.plan,p)
-    c=Clip(project_id=id,title=body.title,plan=upgrade_plan(body.plan.model_dump())); s.add(c); s.commit(); return serialize(c)
+    from .review import VideoSettings
+    from pydantic import ValidationError
+    try:config=VideoSettings(**(body.processing_config or {k:getattr(p,k) for k in ('visual_mode','subtitle_mode','subtitle_animation','include_global','mix_hashtags')}),instansi_ids=body.instansi_ids or p.instansi_ids)
+    except ValidationError as error:raise HTTPException(422,'Konfigurasi video tidak valid.') from error
+    config.aspect_ratio=body.aspect_ratio or p.aspect_ratio
+    c=Clip(project_id=id,title=body.title,plan=upgrade_plan(body.plan.model_dump()),aspect_ratio=body.aspect_ratio or p.aspect_ratio,processing_config=config.model_dump(mode='json',exclude={'instansi_ids'}),instansi_records=resolve_instansi(s,config.instansi_ids)); s.add(c); s.commit(); return serialize(c)
 @app.patch('/api/clips/{id}',response_model=ClipView)
 def save_clip(id:str,body:ClipUpdate,s:DBSession=Depends(session)):
     c=s.scalar(select(Clip).where(Clip.id==id).with_for_update())
     if c is None: raise HTTPException(404,'Clip tidak ditemukan.')
+    if not c.ready:raise HTTPException(409,'Highlight masih diproses.')
+    if body.aspect_ratio and body.aspect_ratio!=c.aspect_ratio:raise HTTPException(422,'Rasio highlight terkunci setelah diproses.')
+    if body.processing_config is not None or body.instansi_ids:raise HTTPException(422,'Konfigurasi pemrosesan tidak dapat diubah melalui penyimpanan editor.')
     if c.revision!=body.revision: raise HTTPException(409,'Clip sudah berubah. Muat ulang sebelum menyimpan.')
     p=get(s,Project,c.project_id)
     lock_plan_assets(s,body.plan.model_dump())
@@ -251,7 +267,9 @@ def save_clip(id:str,body:ClipUpdate,s:DBSession=Depends(session)):
     c.title=body.title; c.plan=normalize(upgrade_plan(incoming)); c.revision+=1; s.commit(); return serialize(c)
 @app.post('/api/clips/{id}/preview',status_code=202)
 def preview(id:str,s:DBSession=Depends(session)):
-    c=get(s,Clip,id); return enqueue(s,c.project_id,'preview',c.id,{'plan':c.plan,'revision':c.revision,'aspect_ratio':get(s,Project,c.project_id).aspect_ratio})
+    c=get(s,Clip,id)
+    if not c.ready:raise HTTPException(409,'Highlight masih diproses.')
+    return enqueue(s,c.project_id,'preview',c.id,{'plan':c.plan,'revision':c.revision,'aspect_ratio':c.aspect_ratio})
 from .export_delivery import ExportConfigView
 
 @app.get('/api/export-config',response_model=ExportConfigView)
@@ -267,9 +285,10 @@ def export(id:str,body:ExportRequest=ExportRequest(),s:DBSession=Depends(session
     try:delivery=config_snapshot()
     except (ValueError,OSError) as e:raise HTTPException(422,str(e))
     c=get(s,Clip,id)
-    ratio=get(s,Project,c.project_id).aspect_ratio
+    if not c.ready:raise HTTPException(409,'Highlight masih diproses.')
+    ratio=c.aspect_ratio
     width,height=dimensions(ratio,body.resolution)
-    return enqueue(s,c.project_id,'export',c.id,{'resolution':body.resolution,'width':width,'height':height,'render_version':RENDER_VERSION,'plan':c.plan,'revision':c.revision,'title':c.title,'delivery':delivery,'aspect_ratio':get(s,Project,c.project_id).aspect_ratio})
+    return enqueue(s,c.project_id,'export',c.id,{'resolution':body.resolution,'width':width,'height':height,'render_version':RENDER_VERSION,'plan':c.plan,'revision':c.revision,'title':c.title,'delivery':delivery,'aspect_ratio':c.aspect_ratio})
 
 @app.get('/api/exports/{id}/download')
 def download_export(id:str,s:DBSession=Depends(session)):
@@ -313,6 +332,11 @@ def retry(id:str,s:DBSession=Depends(session)):
     j=get(s,Job,id)
     if j.status not in ('failed','cancelled'): raise HTTPException(409,'Pekerjaan belum gagal atau dibatalkan.')
     payload=j.payload
+    if j.kind=='build_highlight':
+        from .review import approve,locked_proposal
+        p=locked_proposal(s,j.payload['proposal_id'])
+        if not p or p.job_id!=j.id or p.revision!=j.payload['proposal_revision']:raise HTTPException(409,'Usulan sudah direvisi. Proses dari usulan terbaru.')
+        fresh=approve(s,p,p.revision);s.commit();wake();return public_job(s,fresh)
     # Keep the immutable model/source snapshot and saved stages on retry.
     if j.library_id:
         from .db import VideoClip
@@ -406,7 +430,7 @@ def delete_clip(id:str,s:DBSession=Depends(session)):
     try:
         for path in targets:
             dest=trash/path.name;path.rename(dest);moved.append((path,dest))
-        s.execute(delete(Job).where(Job.clip_id==id));s.delete(c);s.commit()
+        s.execute(delete(HighlightProposal).where(HighlightProposal.clip_id==id));s.execute(delete(Job).where(Job.clip_id==id));s.delete(c);s.commit()
     except Exception:
         s.rollback()
         for path,dest in reversed(moved):dest.rename(path)
@@ -452,6 +476,7 @@ def serve_audio(id:str,asset_id:str,s:DBSession=Depends(session)):
 @app.post('/api/projects/{id}/mix',status_code=202)
 def retry_mix(id:str,s:DBSession=Depends(session)):
     p=get(s,Project,id)
+    if p.workflow=='review':raise HTTPException(409,'Proses atau coba lagi dari usulan highlight agar konfigurasi per highlight tetap dipakai.')
     prior=s.scalar(select(Job).where(Job.project_id==id,Job.kind.in_(['analysis','mix'])).order_by(Job.created_at.desc()))
     payload=prior.payload if prior and prior.payload.get('visual_mode')=='mix' else {'gemini_model':p.gemini_model,'visual_mode':'mix','mix_hashtags':p.mix_hashtags,'source_policy_version':1,'instansi_ids':p.instansi_ids,'include_global':p.include_global,'library':library_snapshot(s,p.mix_hashtags,p.instansi_ids,p.include_global)}
     return enqueue(s,id,'mix',payload=payload)
@@ -464,6 +489,7 @@ class SubtitleApplyRequest(SubtitleRefineRequest):
 @app.post('/api/clips/{id}/subtitle-refinement',status_code=202,response_model=JobView)
 def refine_subtitles(id:str,body:SubtitleRefineRequest,s:DBSession=Depends(session)):
     c=get(s,Clip,id)
+    if not c.ready:raise HTTPException(409,'Highlight masih diproses.')
     if c.revision!=body.revision:raise HTTPException(409,'Highlight berubah. Simpan dan muat ulang sebelum memeriksa subtitle.')
     return enqueue(s,c.project_id,'subtitle_refine',c.id,{'plan':c.plan,'revision':c.revision})
 @app.post('/api/clips/{id}/subtitle-refinement/apply',response_model=ClipView)

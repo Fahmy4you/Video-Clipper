@@ -70,6 +70,7 @@ class CatalogRefresh(BaseModel):
     connection_id:str|None=None
 from uuid import UUID
 class ProjectInput(ModelSelection):
+    workflow: Literal['legacy','review'] = 'legacy'
     enqueue_analysis:bool=False
     request_id:UUID|None=None
     instansi_ids:list[UUID]=Field(default_factory=list,max_length=100)
@@ -126,11 +127,15 @@ class EditPlan(BaseModel):
         if any(a.start > b.start for a,b in zip(self.words, self.words[1:])): raise ValueError('Kata harus berurutan.')
         return self
 class ClipInput(BaseModel):
+    aspect_ratio: Ratio | None = None
+    processing_config: dict | None = None
+    instansi_ids: list[UUID] = Field(default_factory=list)
     title: str = Field(min_length=1, max_length=200)
     plan: EditPlanV2 | EditPlan
 class ClipUpdate(ClipInput):
     revision: int = Field(ge=1)
 class Highlight(BaseModel):
+    summary: str = Field(default='',max_length=2000)
     fulfills_prompt: bool = False
     start: float = Field(ge=0, allow_inf_nan=False)
     end: float = Field(gt=0, allow_inf_nan=False)
@@ -144,6 +149,8 @@ class Highlights(BaseModel):
 from datetime import datetime
 from pydantic import ConfigDict
 class ProjectView(BaseModel):
+    workflow: str = 'legacy'
+    review_counts: dict = Field(default_factory=dict)
     instansi_ids:list[str]=Field(default_factory=list)
     include_global:bool=True
     mix_hashtags: Hashtags = Field(default_factory=list)
@@ -163,6 +170,9 @@ class ProjectView(BaseModel):
     created_at: datetime
     updated_at: datetime
 class ClipView(BaseModel):
+    aspect_ratio: Ratio = '9:16'
+    processing_config: dict = Field(default_factory=dict)
+    instansi_ids: list[str] = Field(default_factory=list)
     fulfills_prompt: bool = False
     id: str
     project_id: str

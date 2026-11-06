@@ -5,7 +5,7 @@ from fastapi import APIRouter,Depends,HTTPException
 from pydantic import BaseModel,Field,field_validator,ConfigDict
 from sqlalchemy import select,func,update
 from sqlalchemy.exc import IntegrityError
-from .db import session,Instansi,VideoClip,project_instansi,instasi_to_video_clips
+from .db import session,Instansi,VideoClip,project_instansi,instasi_to_video_clips,proposal_instansi,clip_instansi,HighlightProposal,Clip
 router=APIRouter(prefix='/api/instansi')
 class InstansiInput(BaseModel):
     model_config=ConfigDict(extra='forbid')
@@ -42,7 +42,7 @@ def filter_sources(library,instansi_ids,include_global=True):
     return [a for a in library if (a.get('scope')=='global' and (include_global or not wanted)) or (a.get('scope')=='instansi' and wanted.intersection(a.get('instansi_ids',[]) if 'instansi_ids' in a else [a.get('instansi_id')]))]
 
 def view(s,item):
-    return {'id':item.id,'name':item.name,'video_count':s.scalar(select(func.count()).select_from(instasi_to_video_clips).where(instasi_to_video_clips.c.instansi_id==item.id)),'project_count':s.scalar(select(func.count()).select_from(project_instansi).where(project_instansi.c.instansi_id==item.id))}
+    return {'id':item.id,'name':item.name,'video_count':s.scalar(select(func.count()).select_from(instasi_to_video_clips).where(instasi_to_video_clips.c.instansi_id==item.id)),'project_count':len(set(s.scalars(select(project_instansi.c.project_id).where(project_instansi.c.instansi_id==item.id))) | set(s.scalars(select(HighlightProposal.project_id).join(proposal_instansi,proposal_instansi.c.proposal_id==HighlightProposal.id).where(proposal_instansi.c.instansi_id==item.id))) | set(s.scalars(select(Clip.project_id).join(clip_instansi,clip_instansi.c.clip_id==Clip.id).where(clip_instansi.c.instansi_id==item.id))))}
 def commit(s):
     try:s.commit()
     except IntegrityError:s.rollback();raise HTTPException(409,'Nama instansi sudah digunakan.')

@@ -15,6 +15,12 @@ project_instansi=Table('project_instansi',Base.metadata,
 instasi_to_video_clips=Table('instasi_to_video_clips',Base.metadata,
     Column('video_clip_id',String(36),ForeignKey('video_clip.id',ondelete='CASCADE'),primary_key=True),
     Column('instansi_id',String(36),ForeignKey('instansi.id',ondelete='RESTRICT'),primary_key=True,index=True))
+proposal_instansi=Table('proposal_instansi',Base.metadata,
+    Column('proposal_id',String(36),ForeignKey('highlight_proposals.id',ondelete='CASCADE'),primary_key=True),
+    Column('instansi_id',String(36),ForeignKey('instansi.id',ondelete='RESTRICT'),primary_key=True,index=True))
+clip_instansi=Table('clip_instansi',Base.metadata,
+    Column('clip_id',String(36),ForeignKey('clips.id',ondelete='CASCADE'),primary_key=True),
+    Column('instansi_id',String(36),ForeignKey('instansi.id',ondelete='RESTRICT'),primary_key=True,index=True))
 class Instansi(Base):
     __tablename__='instansi'
     id: Mapped[str]=mapped_column(String(36),primary_key=True,default=uid)
@@ -22,6 +28,7 @@ class Instansi(Base):
     name_key: Mapped[str]=mapped_column(String(300),unique=True)
 
 class Project(Base):
+    workflow: Mapped[str]=mapped_column(String(16),default='legacy')
     __tablename__ = 'projects'
     request_id: Mapped[str | None] = mapped_column(String(100),unique=True,nullable=True)
     request_hash: Mapped[str | None] = mapped_column(String(64),nullable=True)
@@ -46,6 +53,13 @@ class Project(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
 class Clip(Base):
+    ready: Mapped[bool]=mapped_column(Boolean,default=True)
+    aspect_ratio: Mapped[str]=mapped_column(String(8),default='9:16')
+    processing_config: Mapped[dict]=mapped_column(JSON,default=dict)
+    instansi_records: Mapped[list[Instansi]]=relationship(secondary=clip_instansi,lazy='selectin')
+    @property
+    def instansi_ids(self):return sorted(x.id for x in self.instansi_records)
+
     __tablename__ = 'clips'
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     project_id: Mapped[str] = mapped_column(ForeignKey('projects.id'), index=True)
@@ -55,6 +69,27 @@ class Clip(Base):
     fulfills_prompt: Mapped[bool] = mapped_column(Boolean,default=False)
     revision: Mapped[int] = mapped_column(Integer, default=1)
     plan: Mapped[dict] = mapped_column(JSON)
+class HighlightProposal(Base):
+    __tablename__='highlight_proposals'
+    id: Mapped[str]=mapped_column(String(36),primary_key=True,default=uid)
+    project_id: Mapped[str]=mapped_column(ForeignKey('projects.id',ondelete='CASCADE'),index=True)
+    revision: Mapped[int]=mapped_column(Integer,default=1)
+    title: Mapped[str]=mapped_column(String(200))
+    summary: Mapped[str]=mapped_column(String(2000),default='')
+    reason: Mapped[str]=mapped_column(String(2000),default='')
+    original_start: Mapped[int]=mapped_column(Integer)
+    original_end: Mapped[int]=mapped_column(Integer)
+    start: Mapped[int]=mapped_column(Integer)
+    end: Mapped[int]=mapped_column(Integer)
+    fulfills_prompt: Mapped[bool]=mapped_column(Boolean,default=False)
+    settings: Mapped[dict]=mapped_column(JSON,default=dict)
+    configured: Mapped[bool]=mapped_column(Boolean,default=False)
+    job_id: Mapped[str|None]=mapped_column(String(36),nullable=True)
+    clip_id: Mapped[str|None]=mapped_column(ForeignKey('clips.id',ondelete='SET NULL'),nullable=True)
+    instansi_records: Mapped[list[Instansi]]=relationship(secondary=proposal_instansi,lazy='selectin')
+    @property
+    def instansi_ids(self):return sorted(x.id for x in self.instansi_records)
+    created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now)
 class Job(Base):
     __tablename__ = 'jobs'
     library_id: Mapped[str | None] = mapped_column(ForeignKey('video_clip.id',ondelete='SET NULL'),nullable=True,index=True)
@@ -120,7 +155,7 @@ def track_project_changes(s, flush_context, instances):
             continue
         if isinstance(item, Project) and item not in s.deleted:
             item.updated_at = now()
-        elif isinstance(item, Clip):
+        elif isinstance(item, (Clip, HighlightProposal)):
             project_ids.add(item.project_id)
     for pid in project_ids:
         project = s.get(Project, pid)

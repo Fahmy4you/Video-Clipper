@@ -180,6 +180,77 @@ export interface paths {
         patch: operations["rename_api_hashtags__id__patch"];
         trace?: never;
     };
+    "/api/projects/{pid}/proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listing */
+        get: operations["listing_api_projects__pid__proposals_get"];
+        put?: never;
+        /** Create */
+        post: operations["create_api_projects__pid__proposals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/proposals/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Detail */
+        get: operations["detail_api_proposals__id__get"];
+        put?: never;
+        post?: never;
+        /** Remove */
+        delete: operations["remove_api_proposals__id__delete"];
+        options?: never;
+        head?: never;
+        /** Revise */
+        patch: operations["revise_api_proposals__id__patch"];
+        trace?: never;
+    };
+    "/api/projects/{pid}/proposals/process": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Process */
+        post: operations["process_api_projects__pid__proposals_process_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{pid}/transcript-range": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Transcript Range */
+        get: operations["transcript_range_api_projects__pid__transcript_range_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/gemini-config": {
         parameters: {
             query?: never;
@@ -867,6 +938,21 @@ export interface components {
              */
             key: string;
         };
+        /** Approval */
+        Approval: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Revision */
+            revision: number;
+        };
+        /** ApprovalBatch */
+        ApprovalBatch: {
+            /** Items */
+            items: components["schemas"]["Approval"][];
+        };
         /** AudioImport */
         AudioImport: {
             /**
@@ -1013,6 +1099,14 @@ export interface components {
         };
         /** ClipInput */
         ClipInput: {
+            /** Aspect Ratio */
+            aspect_ratio?: ("9:16" | "16:9" | "1:1" | "4:5" | "4:3") | null;
+            /** Processing Config */
+            processing_config?: {
+                [key: string]: unknown;
+            } | null;
+            /** Instansi Ids */
+            instansi_ids?: string[];
             /** Title */
             title: string;
             /** Plan */
@@ -1020,6 +1114,14 @@ export interface components {
         };
         /** ClipUpdate */
         ClipUpdate: {
+            /** Aspect Ratio */
+            aspect_ratio?: ("9:16" | "16:9" | "1:1" | "4:5" | "4:3") | null;
+            /** Processing Config */
+            processing_config?: {
+                [key: string]: unknown;
+            } | null;
+            /** Instansi Ids */
+            instansi_ids?: string[];
             /** Title */
             title: string;
             /** Plan */
@@ -1029,6 +1131,18 @@ export interface components {
         };
         /** ClipView */
         ClipView: {
+            /**
+             * Aspect Ratio
+             * @default 9:16
+             * @enum {string}
+             */
+            aspect_ratio: "9:16" | "16:9" | "1:1" | "4:5" | "4:3";
+            /** Processing Config */
+            processing_config?: {
+                [key: string]: unknown;
+            };
+            /** Instansi Ids */
+            instansi_ids?: string[];
             /**
              * Fulfills Prompt
              * @default false
@@ -1440,6 +1554,12 @@ export interface components {
             /** Gemini Model */
             gemini_model: string;
             /**
+             * Workflow
+             * @default legacy
+             * @enum {string}
+             */
+            workflow: "legacy" | "review";
+            /**
              * Enqueue Analysis
              * @default false
              */
@@ -1494,6 +1614,15 @@ export interface components {
         };
         /** ProjectView */
         ProjectView: {
+            /**
+             * Workflow
+             * @default legacy
+             */
+            workflow: string;
+            /** Review Counts */
+            review_counts?: {
+                [key: string]: unknown;
+            };
             /** Instansi Ids */
             instansi_ids?: string[];
             /**
@@ -1556,6 +1685,76 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** ProposalInput */
+        ProposalInput: {
+            /** Title */
+            title: string;
+            /**
+             * Summary
+             * @default
+             */
+            summary: string;
+            /** Start */
+            start: number;
+            /** End */
+            end: number;
+        };
+        /** ProposalUpdate */
+        ProposalUpdate: {
+            /** Title */
+            title: string;
+            /**
+             * Summary
+             * @default
+             */
+            summary: string;
+            /** Start */
+            start: number;
+            /** End */
+            end: number;
+            /** Revision */
+            revision: number;
+            settings?: components["schemas"]["VideoSettings"] | null;
+        };
+        /** ProposalView */
+        ProposalView: {
+            /** Id */
+            id: string;
+            /** Project Id */
+            project_id: string;
+            /** Revision */
+            revision: number;
+            /** Title */
+            title: string;
+            /** Summary */
+            summary: string;
+            /** Reason */
+            reason: string;
+            /** Start */
+            start: number;
+            /** End */
+            end: number;
+            /** Original Start */
+            original_start: number;
+            /** Original End */
+            original_end: number;
+            /** Fulfills Prompt */
+            fulfills_prompt: boolean;
+            /** Settings */
+            settings: {
+                [key: string]: unknown;
+            };
+            /** Configured */
+            configured: boolean;
+            /** Job Id */
+            job_id: string | null;
+            /** Clip Id */
+            clip_id: string | null;
+            /** Status */
+            status: string;
+            /** Instansi Ids */
+            instansi_ids: string[];
         };
         /** Revision */
         Revision: {
@@ -1693,6 +1892,26 @@ export interface components {
             /** Targets */
             targets?: ("image" | "podcast" | "broll")[];
         };
+        /** TranscriptGroup */
+        TranscriptGroup: {
+            /** Start */
+            start: number;
+            /** End */
+            end: number;
+            /** Text */
+            text: string;
+        };
+        /** TranscriptRange */
+        TranscriptRange: {
+            /** Groups */
+            groups: components["schemas"]["TranscriptGroup"][];
+            /** Total */
+            total: number;
+            /** Offset */
+            offset: number;
+            /** Limit */
+            limit: number;
+        };
         /** Transform */
         Transform: {
             /**
@@ -1819,6 +2038,39 @@ export interface components {
             thumbnail_url: string;
             /** Thumbnail Base */
             thumbnail_base: string;
+        };
+        /** VideoSettings */
+        VideoSettings: {
+            /**
+             * Aspect Ratio
+             * @default 9:16
+             * @enum {string}
+             */
+            aspect_ratio: "9:16" | "16:9" | "1:1" | "4:5" | "4:3";
+            /**
+             * Visual Mode
+             * @default podcast
+             */
+            visual_mode: string;
+            /**
+             * Subtitle Mode
+             * @default sentence
+             */
+            subtitle_mode: string;
+            /**
+             * Subtitle Animation
+             * @default none
+             */
+            subtitle_animation: string;
+            /** Instansi Ids */
+            instansi_ids?: string[];
+            /**
+             * Include Global
+             * @default true
+             */
+            include_global: boolean;
+            /** Mix Hashtags */
+            mix_hashtags?: string[];
         };
         /** VisualStyle */
         VisualStyle: {
@@ -2390,6 +2642,240 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TagView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listing_api_projects__pid__proposals_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_api_projects__pid__proposals_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProposalInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    detail_api_proposals__id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_api_proposals__id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revise_api_proposals__id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProposalUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    process_api_projects__pid__proposals_process_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApprovalBatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    transcript_range_api_projects__pid__transcript_range_get: {
+        parameters: {
+            query?: {
+                start?: number;
+                end?: number | null;
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                pid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranscriptRange"];
                 };
             };
             /** @description Validation Error */
