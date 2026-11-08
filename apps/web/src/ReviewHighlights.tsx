@@ -1,4 +1,5 @@
-import { durationLabel, mixCapacity } from './timeRange';
+import { useNavigate } from 'react-router-dom';
+import { durationLabel } from './timeRange';
 import { HighlightRequestCards } from './HighlightRequestCards';
 import { ProposalDetail } from './ProposalDetail';
 import { ProposalSearch, RouterRecoveryList } from './ProposalSearch';
@@ -10,8 +11,6 @@ import {
   FileText,
   Settings2,
   Play,
-  Save,
-  Plus,
   Copy,
   Pencil,
   Trash2,
@@ -21,9 +20,9 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { api, stamp, type Project, type Clip, type Job } from './api';
-import { formats, type Ratio } from './editorModel';
+import { type Ratio } from './editorModel';
 import { Button } from './components/ui/button';
-import { Dialog, TagSelect, useConfirm, ActionMenu, ActionItem } from './components/Ui';
+import { Dialog, useConfirm, ActionMenu, ActionItem } from './components/Ui';
 import {
   SelectionToggle,
   SelectCheckbox,
@@ -31,11 +30,10 @@ import {
   BulkBar,
 } from './components/BulkSelection';
 import { isPending, jobLabel, kindLabel, WaitingDetails } from './components/QueueStatus';
-import type { VideoAsset } from './editorModel';
-import type { Instansi } from './components/SourceOwnership';
 import { sourceRanges, rangeLabel, exclusionPrompt } from './sourceRanges';
 import './review.css';
 type Settings = {
+  subtitle_style?: import('./editorModel').Style | null;
   aspect_ratio: Ratio;
   visual_mode: 'podcast' | 'mix';
   subtitle_mode: 'sentence' | 'word';
@@ -63,16 +61,6 @@ export type Proposal = {
   status: string;
   job_id: string | null;
   clip_id: string | null;
-};
-const defaults: Settings = {
-  aspect_ratio: '9:16',
-  visual_mode: 'podcast',
-  subtitle_mode: 'sentence',
-  subtitle_animation: 'none',
-  instansi_ids: [],
-  include_global: true,
-  mix_hashtags: [],
-  mix_max_per_minute: null,
 };
 const pending = (p: Proposal) =>
   [
@@ -217,22 +205,13 @@ export function ReviewHighlights({
   jobs: Job[];
   refresh: () => Promise<void>;
 }) {
+  const navigate = useNavigate();
   const confirm = useConfirm(),
     [rows, setRows] = useState<Proposal[]>([]),
     [loading, setLoading] = useState(true),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
-    [mode, setMode] = useState<'setup' | 'batch' | null>(null),
-    [target, setTarget] = useState<Proposal | null>(null),
-    [title, setTitle] = useState(''),
-    [summary, setSummary] = useState(''),
-    [start, setStart] = useState(''),
-    [end, setEnd] = useState(''),
-    [settings, setSettings] = useState<Settings>(defaults),
-    [assets, setAssets] = useState<VideoAsset[]>([]),
-    [owners, setOwners] = useState<Instansi[]>([]),
-    [initial, setInitial] = useState(''),
-    [dialogError, setDialogError] = useState('');
+    [mode, setMode] = useState<'batch' | null>(null);
   const readySelection = useBulkSelection(clips.map((c) => c.id));
   const [renaming, setRenaming] = useState<Clip | null>(null),
     [renameText, setRenameText] = useState(''),
@@ -263,117 +242,27 @@ export function ReviewHighlights({
       clearInterval(t);
     };
   }, [project.id]);
-  useEffect(() => {
-    if (mode !== 'setup') return;
-    void Promise.all([api<VideoAsset[]>('/video-clips'), api<Instansi[]>('/instansi')])
-      .then(([a, i]) => {
-        setAssets(a);
-        setOwners(i);
-      })
-      .catch((e) => setDialogError(e.message));
-  }, [mode]);
-  const formKey = () => JSON.stringify({ title, summary, start, end, settings }),
-    a = parse(start),
-    b = parse(end),
-    valid =
-      Number.isFinite(a + b) &&
-      a >= 0 &&
-      b - a >= 300 &&
-      b - a <= 36000 &&
-      b <= Math.floor(project.duration * 30);
   async function close() {
     if (busy) return;
-    if (
-      mode !== 'batch' &&
-      formKey() !== initial &&
-      !(await confirm({
-        title: 'Buang perubahan belum tersimpan?',
-        description: 'Revisi yang belum disimpan akan dibuang.',
-        confirmLabel: 'Buang perubahan',
-      }))
-    )
-      return;
     setMode(null);
-    setDialogError('');
   }
-  function open(kind: 'setup', p?: Proposal) {
-    const st = { ...defaults, ...p?.settings, instansi_ids: p?.instansi_ids || [] };
-    const x = p?.start || 0,
-      y = p?.end || Math.min(900, Math.floor(project.duration * 30));
-    setTarget(p || null);
-    setTitle(p?.title || 'Highlight baru');
-    setSummary(p?.summary || '');
-    setStart(tc(x));
-    setEnd(tc(y));
-    if (st.mix_max_per_minute !== null)
-      st.mix_max_per_minute = Math.min(st.mix_max_per_minute, mixCapacity(y - x));
-    setSettings(st);
-    setInitial(
-      JSON.stringify({
-        title: p?.title || 'Highlight baru',
-        summary: p?.summary || '',
-        start: tc(x),
-        end: tc(y),
-        settings: st,
-      }),
-    );
-    setDialogError(
-      p?.settings.mix_max_per_minute && p.settings.mix_max_per_minute > mixCapacity(y - x)
-        ? 'Batas sisipan disesuaikan dengan kapasitas durasi highlight.'
-        : '',
-    );
-    setMode(kind);
+  function open(_kind: 'setup', p?: Proposal) {
+    if (p) navigate('/transcriptions/' + project.id + '/highlights/' + p.id + '/prepare');
   }
   async function act(fn: () => Promise<void>) {
     if (busy) return;
     setBusy(true);
     setError('');
-    setDialogError('');
+
     try {
       await fn();
       await reload();
     } catch (e) {
       setError((e as Error).message);
-      setDialogError((e as Error).message);
     } finally {
       setBusy(false);
     }
   }
-  async function save(process = false) {
-    if (!valid) throw Error('Isi rentang sumber yang valid, 10 detik sampai 20 menit.');
-    let p: Proposal;
-    const body = { title: title.trim(), summary, start: a, end: b };
-    {
-      if (!target) return;
-      if (target.configured && formKey() === initial) p = target;
-      else
-        p = await api('/proposals/' + target.id, 'PATCH', {
-          ...body,
-          revision: target.revision,
-          ...(mode === 'setup' ? { settings } : {}),
-        });
-    }
-    if (process)
-      await api('/projects/' + project.id + '/proposals/process', 'POST', {
-        items: [{ id: p.id, revision: p.revision }],
-      });
-    setMode(null);
-  }
-  const allowed = assets.filter(
-    (v) =>
-      v.status === 'ready' &&
-      v.frames >= 90 &&
-      (!v.scenes.length || v.scenes.some((scene) => scene.end - scene.start >= 90)) &&
-      !v.archived &&
-      ((v.scope === 'global' && (!settings.instansi_ids.length || settings.include_global)) ||
-        (v.scope === 'instansi' &&
-          v.instansi_ids.some((id) => settings.instansi_ids.includes(id)))),
-  );
-  const tags = [...new Set(allowed.flatMap((x) => x.hashtags))],
-    options = [...new Set([...tags, ...settings.mix_hashtags])].sort().map((t) => ({
-      id: t,
-      label: t + (tags.includes(t) ? '' : ' — tidak tersedia untuk sumber ini'),
-    }));
   const selected = rows.filter((p) => selection.selected.has(p.id)),
     canBatch =
       selected.length > 0 &&
@@ -387,10 +276,6 @@ export function ReviewHighlights({
           p.end - p.start >= 300 &&
           p.end - p.start <= 36000,
       );
-  const sourceSummary = !settings.instansi_ids.length
-    ? 'Global saja'
-    : settings.instansi_ids.map((id) => owners.find((x) => x.id === id)?.name || id).join(', ') +
-      (settings.include_global ? ' + Global' : '');
   const active = jobs.some(isPending);
 
   return (
@@ -509,7 +394,6 @@ export function ReviewHighlights({
               <Button
                 disabled={!canBatch || busy}
                 onClick={() => {
-                  setDialogError('');
                   setMode('batch');
                 }}
               >
@@ -739,7 +623,6 @@ export function ReviewHighlights({
             maxLength={200}
           />
         </label>
-        {dialogError && <p role="alert">{dialogError}</p>}
       </Dialog>
       <Dialog open={!!ranges} onClose={() => setRanges(null)} title="Rentang sumber YouTube">
         {ranges && (
@@ -761,264 +644,39 @@ export function ReviewHighlights({
         )}
       </Dialog>
       <Dialog
-        open={mode !== null}
+        open={mode === 'batch'}
         onClose={() => void close()}
-        title={mode === 'batch' ? 'Proses highlight terpilih' : 'Siapkan video'}
-        description={
-          mode === 'setup'
-            ? 'Atur tampilan untuk highlight ini. Rasio terkunci setelah proses diterima.'
-            : mode === 'batch'
-              ? 'Setiap highlight masuk sebagai satu pekerjaan. Hanya satu pekerjaan berat berjalan pada satu waktu.'
-              : 'Waktu mengikuti sumber YouTube. Format HH:MM:SS atau detik; ketelitian 30 fps.'
-        }
+        title="Proses highlight terpilih"
+        description="Setiap highlight masuk sebagai satu pekerjaan."
         footer={
           <>
-            <Button variant="secondary" disabled={busy} onClick={() => void close()}>
+            <Button variant="secondary" disabled={busy} onClick={() => setMode(null)}>
               Batal
             </Button>
-            {mode === 'setup' && (
-              <Button
-                variant="secondary"
-                disabled={busy || !valid}
-                onClick={() => void act(() => save(false))}
-              >
-                <Save size={15} />
-                Simpan pengaturan
-              </Button>
-            )}
             <Button
-              disabled={busy || (mode === 'batch' ? !canBatch : !valid || !title.trim())}
+              disabled={busy || !canBatch}
               onClick={() =>
                 void act(async () => {
-                  if (mode === 'batch') {
-                    await api('/projects/' + project.id + '/proposals/process', 'POST', {
-                      items: selected.map((p) => ({ id: p.id, revision: p.revision })),
-                    });
-                    selection.clear();
-                    setMode(null);
-                  } else await save(mode === 'setup');
+                  await api('/projects/' + project.id + '/proposals/process', 'POST', {
+                    items: selected.map((p) => ({ id: p.id, revision: p.revision })),
+                  });
+                  selection.clear();
+                  setMode(null);
                 })
               }
             >
-              {busy ? (
-                <Loader2 size={15} className="spin" />
-              ) : mode === 'setup' || mode === 'batch' ? (
-                <Play size={15} />
-              ) : (
-                <Save size={15} />
-              )}{' '}
-              {mode === 'setup' || mode === 'batch' ? 'Proses video' : 'Simpan revisi'}
+              Proses video
             </Button>
           </>
         }
       >
-        {dialogError && (
-          <p className="notice" role="alert">
-            {dialogError} Tutup dan buka ulang usulan untuk memuat revisi terbaru jika terjadi
-            konflik.
-          </p>
-        )}
-        {mode === 'batch' ? (
-          <ul>
-            {selected.map((p) => (
-              <li key={p.id}>
-                {p.title} · {tc(p.start)}–{tc(p.end)} · {p.settings.aspect_ratio} ·{' '}
-                {p.settings.visual_mode}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <div className="mg-dialog-form review-dialog-content">
-            <div className="review-range">
-              <strong>{title}</strong>
-              <span>
-                {tc(a)}–{tc(b)} · {stamp((b - a) / 30)}
-              </span>
-            </div>
-            <label>
-              Tampilan video
-              <select
-                aria-label="Tampilan video"
-                value={settings.visual_mode}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    visual_mode: e.target.value as Settings['visual_mode'],
-                    mix_max_per_minute: null,
-                  })
-                }
-              >
-                <option value="podcast">Podcast saja</option>
-                <option value="mix">Mix</option>
-              </select>
-            </label>
-            {settings.visual_mode === 'mix' && (
-              <>
-                <TagSelect
-                  prefix=""
-                  noun="instansi"
-                  max={100}
-                  label="Instansi sumber · opsional"
-                  options={owners.map((i) => ({ id: i.id, label: i.name }))}
-                  value={settings.instansi_ids}
-                  onChange={(ids) =>
-                    setSettings({
-                      ...settings,
-                      instansi_ids: ids,
-                      include_global:
-                        !settings.instansi_ids.length || !ids.length
-                          ? true
-                          : settings.include_global,
-                    })
-                  }
-                />
-                {settings.instansi_ids.length > 0 && (
-                  <label className="source-global-toggle">
-                    <input
-                      type="checkbox"
-                      checked={settings.include_global}
-                      onChange={(e) =>
-                        setSettings({ ...settings, include_global: e.target.checked })
-                      }
-                    />
-                    Sertakan video Global
-                  </label>
-                )}
-                <p className="field-help">Sumber: {sourceSummary}</p>
-              </>
-            )}
-            <fieldset className="ratio-options">
-              <legend>Rasio video</legend>
-              {formats.map((f) => (
-                <button
-                  type="button"
-                  key={f.id}
-                  aria-pressed={settings.aspect_ratio === f.id}
-                  className={settings.aspect_ratio === f.id ? 'active' : ''}
-                  onClick={() => setSettings({ ...settings, aspect_ratio: f.id })}
-                >
-                  <span className="ratio-icon">
-                    <i style={{ aspectRatio: f.width + '/' + f.height, width: 24 }} />
-                  </span>
-                  <strong>{f.id}</strong>
-                  <small>{f.label}</small>
-                </button>
-              ))}
-            </fieldset>
-            <div className="mg-range-fields">
-              <label>
-                Tampilan subtitle
-                <select
-                  aria-label="Tampilan subtitle"
-                  value={settings.subtitle_mode}
-                  onChange={(e) =>
-                    setSettings({
-                      ...settings,
-                      subtitle_mode: e.target.value as Settings['subtitle_mode'],
-                    })
-                  }
-                >
-                  <option value="sentence">Kalimat</option>
-                  <option value="word">Kata per kata</option>
-                </select>
-              </label>
-              <label>
-                Animasi subtitle
-                <select
-                  aria-label="Animasi subtitle"
-                  value={settings.subtitle_animation}
-                  onChange={(e) =>
-                    setSettings({
-                      ...settings,
-                      subtitle_animation: e.target.value as Settings['subtitle_animation'],
-                    })
-                  }
-                >
-                  <option value="none">Tanpa animasi</option>
-                  <option value="soft_zoom">Zoom halus</option>
-                </select>
-              </label>
-            </div>
-            {settings.visual_mode === 'mix' && (
-              <>
-                <div className="mix-density">
-                  {mixCapacity(b - a) <= 1 ? (
-                    <p>
-                      Maksimal 1 sisipan, hingga{' '}
-                      {durationLabel(Math.min(150, Math.floor((b - a) * 0.3)))}.
-                    </p>
-                  ) : (
-                    <>
-                      <label className="source-global-toggle">
-                        <input
-                          type="checkbox"
-                          checked={settings.mix_max_per_minute !== null}
-                          onChange={(e) =>
-                            setSettings({
-                              ...settings,
-                              mix_max_per_minute: e.target.checked ? mixCapacity(b - a) : null,
-                            })
-                          }
-                        />
-                        Batasi jumlah sisipan per menit
-                      </label>
-                      {settings.mix_max_per_minute !== null && (
-                        <label>
-                          Maksimal sisipan per menit
-                          <select
-                            aria-label="Maksimal sisipan per menit"
-                            value={settings.mix_max_per_minute}
-                            onChange={(e) =>
-                              setSettings({
-                                ...settings,
-                                mix_max_per_minute: Number(e.target.value),
-                              })
-                            }
-                          >
-                            {Array.from({ length: mixCapacity(b - a) }, (_, i) => (
-                              <option key={i + 1} value={i + 1}>
-                                {i + 1}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      )}
-                    </>
-                  )}
-                  <p className="field-help">
-                    Jumlah sisipan mengikuti kecocokan pembahasan. Jika batasnya 5 tetapi hanya 3
-                    yang relevan, hanya 3 sisipan yang digunakan.
-                  </p>
-                  <p className="field-help">
-                    Sisipan 3–5 detik; maksimal 30% setiap menit, termasuk sisa menit. Sisipan hanya
-                    ditambahkan jika ada adegan yang relevan.
-                  </p>
-                </div>
-                <TagSelect
-                  label="Batasi topik sisipan — opsional"
-                  options={options}
-                  value={settings.mix_hashtags}
-                  onChange={(v) => setSettings({ ...settings, mix_hashtags: v })}
-                />
-                <p className="field-help">
-                  {
-                    allowed.filter((v) =>
-                      settings.mix_hashtags.every((t) => v.hashtags.includes(t)),
-                    ).length
-                  }{' '}
-                  video siap digunakan. Semua hashtag terpilih wajib dimiliki kandidat.
-                </p>
-                {!allowed.some((v) =>
-                  settings.mix_hashtags.every((t) => v.hashtags.includes(t)),
-                ) && (
-                  <p className="notice">
-                    Tidak ada sisipan yang sesuai. Video tetap diproses dengan tampilan podcast.
-                  </p>
-                )}
-              </>
-            )}
-          </div>
-        )}
+        <ul>
+          {selected.map((p) => (
+            <li key={p.id}>
+              {p.title} · {tc(p.start)}–{tc(p.end)} · {p.settings.aspect_ratio}
+            </li>
+          ))}
+        </ul>
       </Dialog>
     </main>
   );

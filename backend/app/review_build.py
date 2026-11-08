@@ -65,6 +65,8 @@ def build(jid, pid, payload, check):
                 subtitle_mode=payload["subtitle_mode"],
                 subtitle_animation=payload["subtitle_animation"],
             )
+            if payload.get("subtitle_style"):
+                plan["subtitle_style"].update(payload["subtitle_style"])
             for segment in plan["segments"]:
                 improved = fresh_captions(segment, refined["words"])
                 if improved:
@@ -80,6 +82,8 @@ def build(jid, pid, payload, check):
                 processing_config={
                     k: payload.get(k)
                     for k in (
+                        "subtitle_style",
+                        "transition_defaults",
                         "visual_mode",
                         "subtitle_mode",
                         "subtitle_animation",
@@ -114,6 +118,33 @@ def build(jid, pid, payload, check):
         if not p or p.job_id != jid:
             raise Cancelled()
         c = s.get(Clip, cid)
+        if not c.ready and payload.get("subtitle_style") and payload.get("transition_defaults"):
+            from copy import deepcopy
+            from .boundaries import boundaries
+
+            plan = deepcopy(c.plan)
+            defaults = payload["transition_defaults"]
+            values = []
+            for edge in boundaries(plan):
+                before, after = edge["before"], edge["after"]
+                value = edge["value"]
+                if before and before["kind"] == "broll":
+                    value = defaults["outgoing"]
+                    if (
+                        value.get("kind") == "none"
+                        and value.get("sound", "none") == "none"
+                        and after
+                        and after["kind"] == "broll"
+                    ):
+                        value = defaults["incoming"]
+                elif after and after["kind"] == "broll":
+                    value = defaults["incoming"]
+                values.append(
+                    {k: edge[k] for k in ("id", "left", "right")} | {"value": deepcopy(value)}
+                )
+            plan["transition_version"] = 1
+            plan["transitions"] = values
+            c.plan = plan
         c.ready = True
         s.commit()
     return {"clip_id": cid, "message": "Highlight siap dibuka di studio."}

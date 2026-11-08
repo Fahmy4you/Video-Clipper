@@ -2,16 +2,19 @@
 
 import json
 import math
-from pathlib import Path
 from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select
-from .db import session, Project, Clip, Job, HighlightProposal, ProposalSearch, now
-from .schemas import Ratio, Hashtags, JobView
+
+from .db import Clip, HighlightProposal, Job, Project, ProposalSearch, session
 from .instansi_api import resolve_instansi
-from .queue_runtime import PENDING, public_job, wake
 from .media import project_dir
+from .queue_runtime import PENDING, public_job, wake
+from .schemas import Hashtags, JobView, Ratio
+from .timeline import VisualStyle
+from .video_preferences import PreferenceView, TransitionDefaults, read, remember
 
 router = APIRouter(prefix="/api")
 
@@ -20,6 +23,8 @@ class VideoSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
     aspect_ratio: Ratio = "9:16"
     visual_mode: str = Field(default="podcast", pattern="^(podcast|mix)$")
+    subtitle_style: VisualStyle | None = None
+    transition_defaults: TransitionDefaults = Field(default_factory=TransitionDefaults)
     subtitle_mode: str = Field(default="sentence", pattern="^(sentence|word)$")
     subtitle_animation: str = Field(default="none", pattern="^(none|soft_zoom)$")
     instansi_ids: list[UUID] = Field(default_factory=list, max_length=100)
@@ -38,6 +43,11 @@ class VideoSettings(BaseModel):
         if not self.instansi_ids:
             self.include_global = True
         return self
+
+
+@router.get("/video-preferences", response_model=PreferenceView)
+def preferences(s=Depends(session)):
+    return read(s)
 
 
 class ProposalInput(BaseModel):
@@ -60,6 +70,7 @@ class Approval(BaseModel):
 
 class ApprovalBatch(BaseModel):
     items: list[Approval] = Field(min_length=1, max_length=100)
+    remember_style: bool = False
 
 
 class ProposalView(BaseModel):
@@ -114,7 +125,7 @@ def locked_proposal(s, id):
 
 
 def validate_range(start, end, duration):
-    from .highlight_limits import MIN_FRAMES, MAX_FRAMES
+    from .highlight_limits import MAX_FRAMES, MIN_FRAMES
 
     if start < 0 or end > math.floor(duration * 30 + 0.00001):
         raise HTTPException(422, "Rentang harus berada dalam video sumber.")
@@ -387,7 +398,18 @@ def process(pid: str, body: ApprovalBatch, s=Depends(session)):
         raise HTTPException(404, "Usulan tidak ditemukan pada proyek ini.")
     revisions = {str(x.id): x.revision for x in body.items}
     try:
+        prior = s.get(Job, rows[0].job_id) if len(rows) == 1 and rows[0].job_id else None
+        fresh = len(rows) == 1 and (
+            not prior or prior.payload.get("proposal_revision") != rows[0].revision
+        )
         jobs = [approve(s, p, revisions[p.id]) for p in rows]
+        if body.remember_style and fresh:
+            remember(
+                s,
+                VideoSettings(**rows[0].settings, instansi_ids=rows[0].instansi_ids).model_dump(
+                    mode="json"
+                ),
+            )
         s.commit()
     except Exception:
         s.rollback()

@@ -180,6 +180,23 @@ export interface paths {
         patch: operations["rename_api_hashtags__id__patch"];
         trace?: never;
     };
+    "/api/video-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Preferences */
+        get: operations["preferences_api_video_preferences_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{pid}/proposals": {
         parameters: {
             query?: never;
@@ -990,6 +1007,11 @@ export interface components {
         ApprovalBatch: {
             /** Items */
             items: components["schemas"]["Approval"][];
+            /**
+             * Remember Style
+             * @default false
+             */
+            remember_style: boolean;
         };
         /** AudioImport */
         AudioImport: {
@@ -1521,6 +1543,23 @@ export interface components {
             layer: number;
             style?: components["schemas"]["VisualStyle"];
         };
+        /** PreferenceStyle */
+        PreferenceStyle: {
+            subtitle_style: components["schemas"]["VisualStyle"];
+            transition_defaults: components["schemas"]["TransitionDefaults"];
+        };
+        /** PreferenceView */
+        PreferenceView: {
+            /**
+             * Version
+             * @default 1
+             * @constant
+             */
+            version: 1;
+            /** Revision */
+            revision: number;
+            style: components["schemas"]["PreferenceStyle"];
+        };
         /** ProjectInput */
         ProjectInput: {
             /** Gemini Model */
@@ -2042,6 +2081,16 @@ export interface components {
              */
             frames: number;
         };
+        /** TransitionDefaults */
+        TransitionDefaults: {
+            /**
+             * Same
+             * @default true
+             */
+            same: boolean;
+            incoming?: components["schemas"]["Transition"];
+            outgoing?: components["schemas"]["Transition"];
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -2123,6 +2172,8 @@ export interface components {
              * @default podcast
              */
             visual_mode: string;
+            subtitle_style?: components["schemas"]["VisualStyle"] | null;
+            transition_defaults?: components["schemas"]["TransitionDefaults"];
             /**
              * Subtitle Mode
              * @default sentence
@@ -2209,6 +2260,21 @@ export interface components {
              * @enum {string}
              */
             align: "left" | "center" | "right";
+            /** Subtitle Version */
+            subtitle_version?: number | null;
+            /** Subtitle Template */
+            subtitle_template?: ("sentence" | "word" | "background" | "reveal" | "reveal_up" | "karaoke" | "karaoke_active") | null;
+            /**
+             * Subtitle Motion
+             * @default none
+             * @enum {string}
+             */
+            subtitle_motion: "none" | "fade" | "zoom" | "zoom_fade" | "down" | "down_fade";
+            /**
+             * Background
+             * @default #FACC15
+             */
+            background: string;
             /**
              * Karaoke
              * @default true
@@ -2724,6 +2790,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preferences_api_video_preferences_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreferenceView"];
                 };
             };
         };

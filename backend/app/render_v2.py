@@ -140,6 +140,11 @@ def overlay_image(
         else:
             words = item.get("words")
             scale = 1
+            if words is not None and style.get("subtitle_version") == 1:
+                from .subtitle_templates import text_image as modern_text
+
+                canvas.alpha_composite(modern_text(item, style, frame, w, h))
+                continue
             if words is not None:
                 from .subtitle_presentation import presentation
 
@@ -262,7 +267,12 @@ def render_v2(
 
     output_w, output_h = dimensions(ratio, 360 if preview else resolution)
     filtered = any(f["strength"] and f["targets"] for f in plan["filters"])
-    if not filtered:
+    modern_subtitles = plan["subtitle_style"].get("subtitle_version") == 1 or any(
+        (c.get("style") or {}).get("subtitle_version") == 1
+        for segment in plan["segments"]
+        for c in segment["captions"]
+    )
+    if not filtered and not modern_subtitles:
         w, h = output_w, output_h
     work = out.parent / (out.stem + "-work")
     work.mkdir(exist_ok=True)
@@ -478,7 +488,7 @@ def render_v2(
                 f"[shutter{i}]atrim=start_sample={event['skip']}:end_sample={event['skip'] + event['length']},asetpts=PTS-STARTPTS,volume={event['volume']},adelay={event['start']}S:all=1[{label}]"
             )
             labels.append(f"[{label}]")
-    if filtered and (output_w, output_h) != (w, h):
+    if (filtered or modern_subtitles) and (output_w, output_h) != (w, h):
         rw, rh = output_w, output_h
         filters[0] = filters[0].replace("format=yuv420p[v]", f"format=yuv420p,scale={rw}:{rh}[v]")
     progress("Encoding MP4", 90)

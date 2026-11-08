@@ -1,0 +1,324 @@
+@font-face {
+  font-family: 'DejaVu Sans';
+  src: url('/fonts/EditorDejaVu.ttf');
+  font-weight: 600;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Liberation Sans';
+  src: url('/fonts/EditorLiberation.ttf');
+  font-weight: 600;
+  font-display: block;
+}
+.video-prepare {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+  display: grid;
+  gap: 24px;
+}
+.video-prepare h1,
+.video-prepare h2,
+.video-prepare p {
+  margin: 0;
+}
+.video-prepare header,
+.prepare-section,
+.subtitle-settings {
+  display: grid;
+  gap: 16px;
+}
+.prepare-section {
+  padding: 24px;
+}
+.prepare-section > summary {
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+}
+.prepare-section > summary span {
+  color: var(--muted);
+}
+.prepare-section[open] > summary {
+  margin-bottom: 24px;
+}
+.prepare-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 16px;
+}
+.subtitle-settings fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.subtitle-settings legend {
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+.subtitle-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.subtitle-card {
+  min-width: 0;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  background: var(--surface);
+}
+.subtitle-card.selected {
+  border-color: var(--link);
+}
+.subtitle-card:has(:focus-visible) {
+  border-color: var(--link);
+  border-style: dashed;
+}
+.subtitle-card input:focus-visible {
+  box-shadow: none;
+  outline: none;
+}
+.subtitle-card label {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+.subtitle-card input[type='radio'] {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.subtitle-card canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #17202e;
+  border-radius: 8px;
+  margin-top: 6px;
+}
+.prepare-transitions {
+  display: grid;
+  gap: 20px;
+}
+.video-prepare .ratio-options {
+  margin: 0;
+}
+.video-prepare .mg-dialog-form {
+  gap: 20px;
+}
+
+.prepare-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  justify-self: start;
+}
+.prepare-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.prepare-highlight {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.prepare-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.prepare-actions .button {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  justify-content: center;
+}
+.prepare-accordion {
+  padding: 0;
+  min-width: 0;
+}
+.prepare-accordion-heading {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  padding: 20px 24px;
+  min-height: 84px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: var(--text);
+}
+.prepare-accordion-heading > svg {
+  flex-shrink: 0;
+}
+.prepare-accordion-heading span {
+  color: var(--muted);
+}
+.prepare-accordion.is-disabled {
+  opacity: 0.55;
+}
+.prepare-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    grid-template-rows 220ms ease-in-out,
+    opacity 220ms ease-in-out,
+    visibility 220ms;
+}
+.prepare-collapse.is-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  visibility: visible;
+}
+.prepare-collapse > div {
+  min-height: 0;
+  overflow: hidden;
+}
+.prepare-accordion-body {
+  padding: 0 24px 24px;
+}
+.prepare-transition-group {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  display: grid;
+  gap: 16px;
+}
+.prepare-transition-group legend {
+  margin-bottom: 16px;
+  font-weight: 600;
+}
+.prepare-transitions {
+  container-type: inline-size;
+}
+.prepare-sounds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.prepare-sounds [aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--surface-alt);
+}
+.video-prepare .source-global-toggle {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  margin: 0;
+  min-height: 44px;
+}
+.video-prepare .source-global-toggle input {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  margin: 0;
+}
+.mix-help {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 8px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.65;
+}
+.video-prepare
+  :is(
+    button,
+    a,
+    select,
+    summary,
+    input[type='checkbox'],
+    input[type='radio'],
+    input[type='range'],
+    input[type='color'],
+    label:has(input[type='checkbox']),
+    label:has(select),
+    label:has(input[type='color']),
+    label:has(input[type='radio'])
+  ) {
+  cursor: pointer;
+}
+.video-prepare :is(button, input, select):disabled,
+.video-prepare [aria-disabled='true'] {
+  cursor: not-allowed;
+}
+.video-prepare :is(input, select, textarea):focus-visible {
+  outline: none;
+  box-shadow: none;
+  border-color: var(--accent);
+}
+.video-prepare .subtitle-card:has(:focus-visible) {
+  border-color: var(--accent);
+  border-style: dashed;
+}
+.video-prepare button:focus-visible,
+.video-prepare a:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.subtitle-settings {
+  container-type: inline-size;
+}
+@container (max-width: 900px) {
+  .subtitle-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container (max-width: 540px) {
+  .subtitle-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 600px) {
+  .video-prepare {
+    padding: 16px;
+    gap: 16px;
+  }
+  .prepare-section {
+    padding: 16px;
+  }
+  .prepare-heading {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .prepare-accordion-heading {
+    padding: 16px;
+    flex-wrap: wrap;
+    min-height: 76px;
+  }
+  .prepare-accordion-heading span {
+    flex-basis: 100%;
+    margin-left: 30px;
+  }
+  .prepare-accordion-body {
+    padding: 0 16px 16px;
+  }
+  .prepare-fields {
+    grid-template-columns: 1fr;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .prepare-collapse {
+    transition: none;
+  }
+}

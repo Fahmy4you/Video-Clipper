@@ -3,7 +3,7 @@
 from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
-RENDER_VERSION = "export-resolution-1"
+RENDER_VERSION = "subtitle-templates-3"
 from .timeline import RESOLUTIONS
 
 

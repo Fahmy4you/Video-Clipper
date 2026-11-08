@@ -1,3 +1,4 @@
+import { PreviewScope, SubtitleSettings } from './SubtitleSettings';
 import { ExportDialog } from './ExportDialog';
 import { watchExport } from './ExportDownloads';
 import type { PreviewStatus } from './PreviewMedia';
@@ -674,8 +675,26 @@ export function VisualEditor() {
           source_in: sourceIn,
           reason: 'Dipilih manual',
           transform: { mode: 'fill', x: 0.5, y: 0.5, scale: 1, b: 0.7 },
-          transition_in: { kind: 'black', frames: 9 },
-          transition_out: { kind: 'black', frames: 9 },
+          transition_in: (
+            clips.find((c) => c.id === clipId)?.processing_config as
+              | {
+                  transition_defaults?: {
+                    incoming: import('./editorModel').Transition;
+                    outgoing: import('./editorModel').Transition;
+                  };
+                }
+              | undefined
+          )?.transition_defaults?.incoming || { kind: 'black', frames: 9 },
+          transition_out: (
+            clips.find((c) => c.id === clipId)?.processing_config as
+              | {
+                  transition_defaults?: {
+                    incoming: import('./editorModel').Transition;
+                    outgoing: import('./editorModel').Transition;
+                  };
+                }
+              | undefined
+          )?.transition_defaults?.outgoing || { kind: 'black', frames: 9 },
         });
       }
     });
@@ -1342,32 +1361,6 @@ export function VisualEditor() {
           )}
           {caption && (
             <>
-              <label>
-                Tampilan subtitle
-                <select
-                  aria-label="Tampilan subtitle"
-                  value={selectedStyle?.subtitle_mode || 'sentence'}
-                  onChange={(e) =>
-                    changeStyle({ subtitle_mode: e.target.value as 'sentence' | 'word' })
-                  }
-                >
-                  <option value="sentence">Kalimat</option>
-                  <option value="word">Kata per kata</option>
-                </select>
-              </label>
-              <label>
-                Animasi subtitle
-                <select
-                  aria-label="Animasi subtitle"
-                  value={selectedStyle?.subtitle_animation || 'none'}
-                  onChange={(e) =>
-                    changeStyle({ subtitle_animation: e.target.value as 'none' | 'soft_zoom' })
-                  }
-                >
-                  <option value="none">Tanpa animasi</option>
-                  <option value="soft_zoom">Zoom halus</option>
-                </select>
-              </label>
               {caption.words.some((w) => w.timing_estimated) && (
                 <p className="field-help">
                   Timing kata tambahan masih perkiraan. Dengarkan dan sesuaikan waktunya sebelum
@@ -1502,7 +1495,15 @@ export function VisualEditor() {
                   </label>
                 ))}
               </div>
-              {overlay?.kind !== 'image' && (
+              {caption && (
+                <PreviewScope>
+                  <SubtitleSettings
+                    value={selectedStyle}
+                    onChange={(style) => changeStyle(style)}
+                  />
+                </PreviewScope>
+              )}
+              {overlay?.kind !== 'image' && !caption && (
                 <>
                   <label>
                     Font
@@ -1564,16 +1565,6 @@ export function VisualEditor() {
                       <option value="right">Kanan</option>
                     </select>
                   </label>
-                  {caption && (
-                    <label className="check">
-                      <input
-                        type="checkbox"
-                        checked={selectedStyle.karaoke}
-                        onChange={(e) => changeStyle({ karaoke: e.target.checked })}
-                      />
-                      Highlight kata
-                    </label>
-                  )}
                 </>
               )}
               {overlay && (

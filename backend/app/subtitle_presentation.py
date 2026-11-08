@@ -24,6 +24,19 @@ def presentation(caption, style, frame):
 
 
 def change_points(caption, style):
+    if style.get("subtitle_version") == 1:
+        if style.get("subtitle_motion", "none") != "none" or style.get("subtitle_template") in (
+            "background",
+            "reveal",
+            "reveal_up",
+        ):
+            return set(range(caption["start"], caption["end"] + 1))
+        return {
+            caption["start"],
+            caption["end"],
+            *(w["start"] for w in caption["words"]),
+            *(w["end"] for w in caption["words"]),
+        }
     points = {caption["start"], caption["end"]}
     word_mode = style.get("subtitle_mode") == "word"
     if style.get("karaoke") or word_mode:

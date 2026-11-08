@@ -30,6 +30,15 @@ class VisualStyle(Strict):
     highlight: str = Field(default="#5EEAD4", pattern=r"^#[0-9A-Fa-f]{6}$")
     outline: float = Field(default=3, ge=0, le=12)
     align: Literal["left", "center", "right"] = "center"
+    subtitle_version: int | None = Field(default=None, ge=1, le=1)
+    subtitle_template: (
+        Literal[
+            "sentence", "word", "background", "reveal", "reveal_up", "karaoke", "karaoke_active"
+        ]
+        | None
+    ) = None
+    subtitle_motion: Literal["none", "fade", "zoom", "zoom_fade", "down", "down_fade"] = "none"
+    background: str = Field(default="#FACC15", pattern=r"^#[0-9A-Fa-f]{6}$")
     karaoke: bool = True
     subtitle_mode: Literal["sentence", "word"] = "sentence"
     subtitle_animation: Literal["none", "soft_zoom"] = "none"

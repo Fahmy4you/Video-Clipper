@@ -7,6 +7,7 @@ import {
 } from './PreviewMedia';
 import { Sharpener } from './Sharpener';
 import { paintFlash } from './transitionEffects';
+import { drawSubtitle } from './subtitleTemplates';
 import { subtitlePresentation } from './subtitlePresentation';
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -66,6 +67,10 @@ function drawText(
   w: number,
   h: number,
 ) {
+  if ('words' in item && style.subtitle_version === 1) {
+    drawSubtitle(ctx, item, style, frame, w, h);
+    return;
+  }
   const display = 'words' in item ? subtitlePresentation(item, style, frame) : null;
   if (display && !display.words.length) return;
   ctx.save();

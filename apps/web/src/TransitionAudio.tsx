@@ -5,13 +5,13 @@ import { planSoundEvents, soundWindows, type Effect } from './transitionEffects'
 let context: AudioContext | undefined,
   catalogPromise: Promise<Effect[]> | undefined,
   bufferPromise: Promise<AudioBuffer> | undefined;
-const getContext = () => (context ??= new AudioContext({ sampleRate: 48000 }));
-const catalog = () =>
+export const getContext = () => (context ??= new AudioContext({ sampleRate: 48000 }));
+export const catalog = () =>
   (catalogPromise ??= api<Effect[]>('/transition-effects').catch((e) => {
     catalogPromise = undefined;
     throw e;
   }));
-function getBuffer(ctx: AudioContext, url: string) {
+export function getBuffer(ctx: AudioContext, url: string) {
   return (bufferPromise ??= fetch(url)
     .then((r) => {
       if (!r.ok) throw new Error('Audio efek tidak tersedia.');

@@ -78,3 +78,24 @@ berlaku. Kandidat yang tidak muat dilepas, bukan dipotong otomatis.
 Versi aturan disimpan server pada snapshot pekerjaan. Pekerjaan lama dan retry
 snapshot lama dipertahankan; video lama tidak dihasilkan ulang. Draft batas
 menyesuaikan penurunan kapasitas ketika durasi direvisi dan disimpan manual.
+
+## Video style preparation
+
+The preparation page is /transcriptions/:projectId/highlights/:proposalId/prepare.
+Save settings stores a proposal draft. Process video saves first and snapshots the
+approved style before enqueueing. GET /api/video-preferences returns workspace
+style defaults. Only a new single approval with remember_style=true updates them;
+batch processing, retries, draft saves, and studio edits do not.
+
+Subtitle templates: sentence, word, background, reveal (down), reveal_up, karaoke (persistent), karaoke_active (current word only). Paired entrance/exit
+motions: none, fade, zoom, zoom_fade, down, down_fade. New styles use subtitle_version=1;
+unversioned plans retain the original presentation. Preferences include subtitle style
+and incoming/outgoing insertion transitions, but exclude source selection and ratio.
+
+Modern subtitle motion uses smooth acceleration, 96–100% zoom and 12% font-size travel. Existing version-1 styles adopt the smoother curves on playback and new exports; existing MP4s are retained.
+
+### Pemilih gaya pada Siapkan video
+
+Tindakan reset, simpan, dan proses berada pada header sebagai tombol ikon. Panel subtitle dan transisi memakai accordion beranimasi dengan konten tertutup nonaktif. Kartu menggunakan CSS Grid rata kiri, tiga/dua/satu kolom sesuai lebar komponen. Transisi selalu terlihat tetapi nonaktif pada mode Podcast; pergantian mode mempertahankan draft Mix.
+
+Contoh transisi memakai aset bawaan dua foto kucing, fungsi bobot transisi studio, dan pola Kilatan yang sama. Preview visual bersifat senyap dan berbagi satu pemutar aktif dengan subtitle. Audisi shutter hanya diputar melalui klik pengguna, memakai katalog serta cache audio yang sama dengan studio, dan dihentikan ketika panel/halaman tidak aktif.

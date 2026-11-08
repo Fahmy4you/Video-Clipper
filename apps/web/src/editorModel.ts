@@ -34,6 +34,18 @@ export type Style = {
   highlight: string;
   outline: number;
   align: 'left' | 'center' | 'right';
+  subtitle_version?: 1 | null;
+  subtitle_template?:
+    | 'sentence'
+    | 'word'
+    | 'background'
+    | 'reveal'
+    | 'reveal_up'
+    | 'karaoke'
+    | 'karaoke_active'
+    | null;
+  subtitle_motion?: 'none' | 'fade' | 'zoom' | 'zoom_fade' | 'down' | 'down_fade';
+  background?: string;
   karaoke: boolean;
   subtitle_mode?: 'sentence' | 'word';
   subtitle_animation?: 'none' | 'soft_zoom';

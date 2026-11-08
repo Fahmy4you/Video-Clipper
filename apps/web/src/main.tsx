@@ -1,3 +1,4 @@
+import { VideoPrepare } from './VideoPrepare';
 import { ExportDownloads } from './ExportDownloads';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -161,6 +162,7 @@ const router = createBrowserRouter([
         path: '/transcriptions/:id/highlights/:proposalId',
         element: <HighlightsPage view="transcription" />,
       },
+      { path: '/transcriptions/:id/highlights/:proposalId/prepare', element: <VideoPrepare /> },
       { path: '/projects', element: <ProjectsPage view="video" /> },
       { path: '/projects/:id', element: <HighlightsPage /> },
       { path: '/projects/:id/clips/:clipId', element: <VisualEditor /> },

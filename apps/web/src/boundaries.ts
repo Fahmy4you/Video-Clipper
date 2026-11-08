@@ -180,6 +180,12 @@ export function boundaryEvents(p: Plan, frames: Record<string, number> = {}) {
     return { ...e, requested, half: kind === 'none' ? 0 : half, kind, fallback };
   });
 }
+export function transitionWeights(kind: string, progress: number): [number, number] {
+  const x = Math.max(0, Math.min(1, progress));
+  if (kind === 'crossfade') return [1 - x, x];
+  if (kind === 'black') return x < 0.5 ? [1 - 2 * x, 0] : [0, 2 * x - 1];
+  return x < 0.5 ? [1, 0] : [0, 1];
+}
 export function visualLayers(p: Plan, frame: number, frames: Record<string, number> = {}) {
   const spans = visualSpans(p),
     event = boundaryEvents(p, frames).find(
@@ -194,11 +200,13 @@ export function visualLayers(p: Plan, frame: number, frames: Record<string, numb
       x = (frame - event.frame + half) / (2 * half);
     if (event.kind === 'crossfade')
       return [
-        before && { span: before, weight: 1 - x },
-        after && { span: after, weight: x },
+        before && { span: before, weight: transitionWeights(event.kind, x)[0] },
+        after && { span: after, weight: transitionWeights(event.kind, x)[1] },
       ].filter(Boolean) as { span: VisualSpan; weight: number }[];
     const span = frame < event.frame ? before : after;
-    return span ? [{ span, weight: Math.abs(frame - event.frame) / half }] : [];
+    return span
+      ? [{ span, weight: transitionWeights(event.kind, x)[frame < event.frame ? 0 : 1] }]
+      : [];
   }
   const span = spans.find((s) => frame >= s.start && frame < s.end);
   return span ? [{ span, weight: 1 }] : [];
