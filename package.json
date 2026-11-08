@@ -1,1 +1,15 @@
-{"name":"video-clipping","private":true,"scripts":{"dev":"python3 scripts/dev.py","build":"npm --prefix apps/web run build","test":".venv/bin/python -m pytest backend/tests -q","types":"npm --prefix apps/web run types"}}
+{
+  "name": "video-clipping",
+  "private": true,
+  "scripts": {
+    "dev": "python3 scripts/dev.py",
+    "build": "npm --prefix apps/web run build",
+    "test": ".venv/bin/python -m pytest backend/tests -q",
+    "types": "npm --prefix apps/web run types",
+    "format": "prettier --write package.json apps/web/package.json apps/web/tsconfig.json apps/web/index.html apps/web/vite.config.ts \"apps/web/src/**/*.{ts,tsx,css}\" \"scripts/*.cjs\" && .venv/bin/python -m ruff format backend scripts",
+    "format:check": "prettier --check package.json apps/web/package.json apps/web/tsconfig.json apps/web/index.html apps/web/vite.config.ts \"apps/web/src/**/*.{ts,tsx,css}\" \"scripts/*.cjs\" && .venv/bin/python -m ruff format --check backend scripts"
+  },
+  "devDependencies": {
+    "prettier": "^3.9.10"
+  }
+}

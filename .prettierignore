@@ -1,0 +1,6 @@
+node_modules/
+apps/web/node_modules/
+apps/web/dist/
+storage/
+.venv/
+apps/web/src/api-schema.d.ts

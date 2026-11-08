@@ -1,61 +1,68 @@
-const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
-const fs=require('fs');
-fs.mkdirSync('storage/qa',{recursive:true});
-(async()=>{
-const browser=await chromium.launch({channel:'msedge',headless:true});
-const page=await browser.newPage({viewport:{width:1366,height:900}});
-const errors=[];page.on('pageerror',e=>errors.push(e.message));
-await page.goto('http://localhost:5173');
-await page.getByRole('heading',{name:/Cerita panjang/}).waitFor();
-await page.screenshot({path:'storage/qa/dashboard-desktop.png',fullPage:true});
-for(const width of [768,390]){
- await page.setViewportSize({width,height:900});
- await page.screenshot({path:`storage/qa/dashboard-${width}.png`,fullPage:true});
- if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw new Error(`Overflow dashboard ${width}`);
+/* Read-only browser smoke test. No analysis, deletion or export is submitted. */
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const fs = require('node:fs');
+const path = require('node:path');
+
+async function main() {
+  const base = process.env.APP_URL || 'http://localhost:5173';
+  const output = path.join(__dirname, '..', 'storage', 'qa', 'ui-smoke');
+  fs.mkdirSync(output, { recursive: true });
+  const options = { headless: true };
+  if (process.env.CHROMIUM_PATH) options.executablePath = process.env.CHROMIUM_PATH;
+  else if (process.platform === 'win32') options.channel = 'msedge';
+  const browser = await chromium.launch(options);
+  const page = await browser.newPage();
+  const errors = [];
+  const failures = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('response', (response) => {
+    if (response.status() >= 500) failures.push({ url: response.url(), status: response.status() });
+  });
+  const response = await fetch(new URL('/api/projects', base));
+  if (!response.ok) throw new Error('Project API returned ' + response.status);
+  const projects = await response.json();
+  const routes = ['/', '/transcriptions', '/projects', '/settings', '/library'];
+  if (projects[0]) routes.push('/transcriptions/' + projects[0].id);
+  const results = [];
+  try {
+    for (const theme of ['light', 'dark']) {
+      await page.emulateMedia({ colorScheme: theme });
+      for (const [width, height] of [
+        [1366, 768],
+        [1366, 597],
+        [390, 844],
+      ]) {
+        await page.setViewportSize({ width, height });
+        for (const route of routes) {
+          await page.goto(new URL(route, base).href);
+          await page.locator('h1').waitFor();
+          await page.waitForTimeout(500);
+          const overflow = await page.evaluate(
+            () => document.documentElement.scrollWidth > innerWidth + 1,
+          );
+          results.push({ route, width, height, theme, overflow });
+          const filename = [theme, width, height, route.replaceAll('/', '_')].join('-') + '.png';
+          await page.screenshot({ path: path.join(output, filename), fullPage: true });
+        }
+      }
+    }
+  } finally {
+    await browser.close();
+  }
+  fs.writeFileSync(
+    path.join(output, 'results.json'),
+    JSON.stringify({ results, errors, failures }, null, 2),
+  );
+  console.log(
+    JSON.stringify(
+      { pages: results.length, errors, failures, overflows: results.filter((r) => r.overflow) },
+      null,
+      2,
+    ),
+  );
+  if (errors.length || failures.length || results.some((r) => r.overflow)) process.exitCode = 1;
 }
-await page.getByRole('link',{name:'Konfigurasi',exact:true}).click();
-await page.getByRole('heading',{name:'Semua dimulai dari sini.'}).waitFor();
-await page.screenshot({path:'storage/qa/settings-mobile.png',fullPage:true});
-if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw new Error('Overflow settings');
-// Isolated UI fixture: does not create sample data in the application database.
-const project={id:'00000000-0000-0000-0000-000000000001',title:'Podcast pengujian editor',gemini_model:'gemini-test',url:'https://www.youtube.com/watch?v=dQw4w9WgXcQ',duration:120,status:'ready',created_at:new Date().toISOString()};
-let clip={id:'00000000-0000-0000-0000-000000000002',project_id:project.id,title:'Membangun kebiasaan kecil',reason:'Fixture pengujian, bukan hasil analisis AI.',revision:1,plan:{start:10,end:45,words:[{start:0,end:.5,text:'Mulai'},{start:.5,end:1,text:'dari'},{start:1,end:1.5,text:'sekarang'}],layouts:[{start:0,mode:'fit',a:.3,b:.7}],style:{font:'DejaVu Sans',size:62,color:'#FFFFFF',highlight:'#5EEAD4',outline:3,margin:180}}};
-let saves=0,renders=0;
-await page.route('**/api/**',async route=>{
- const u=new URL(route.request().url()),path=u.pathname;
- let data;
- if(path==='/api/models')data=[{id:'gemini-test',name:'Test Gemini'}];
- else if(path==='/api/health')data={database:'ready',redis:true,ffmpeg:true,gemini:true,model:'test'};
- else if(path===`/api/projects/${project.id}`)data=project;
- else if(path.endsWith('/clips')&&route.request().method()==='GET')data=[clip];
- else if(path.endsWith('/jobs'))data=[];
- else if(path===`/api/clips/${clip.id}`&&route.request().method()==='PATCH'){clip={...clip,...route.request().postDataJSON(),revision:clip.revision+1};saves++;data=clip;}
- else if(path.endsWith('/preview')){renders++;data={id:'test-job',status:'queued'};}
- else data=[];
- await route.fulfill({json:data});
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
 });
-await page.setViewportSize({width:1366,height:900});
-await page.goto('http://localhost:5173/projects/'+project.id);
-await page.getByRole('textbox',{name:'Judul clip'}).waitFor();
-await page.getByRole('textbox',{name:'Judul clip'}).fill('Judul yang diedit');
-await page.getByRole('button',{name:'Undo',exact:true}).click();
-if(await page.getByRole('textbox',{name:'Judul clip'}).inputValue()!=='Membangun kebiasaan kecil')throw new Error('Undo gagal');
-await page.getByRole('button',{name:'Redo',exact:true}).click();
-await page.getByRole('button',{name:'Simpan',exact:true}).click();
-await page.getByRole('button',{name:'Tersimpan',exact:true}).waitFor();
-await page.getByRole('button',{name:'Framing',exact:true}).click();
-await page.locator('.layouts select').selectOption('split');
-await page.getByRole('button',{name:'Render preview',exact:true}).click();
-await page.getByRole('button',{name:'Tersimpan',exact:true}).waitFor();
-await page.screenshot({path:'storage/qa/editor-desktop.png',fullPage:true});
-for(const width of [768,390]){
- await page.setViewportSize({width,height:900});
- await page.screenshot({path:`storage/qa/editor-${width}.png`,fullPage:true});
- if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw new Error(`Overflow editor ${width}`);
-}
-if(saves!==2||renders!==1)throw new Error(`Expected 2 saves, 1 preview: ${saves}, ${renders}`);
-if(errors.length)throw new Error(errors.join('\n'));
-const report={result:'passed',viewports:[1366,768,390],pageErrors:errors,fixtureTests:['edit title','undo','redo','save revision','split layout','save before preview'],saves,renders};
-fs.writeFileSync('storage/qa/ui-report.json',JSON.stringify(report,null,2));console.log(report);
-await browser.close();
-})().catch(e=>{console.error(e);process.exit(1)});

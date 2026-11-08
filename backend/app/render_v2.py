@@ -1,173 +1,534 @@
 """Frame-based compositor: cut both AV streams, rasterize overlays, encode final MP4."""
-import json,math,shutil
-from pathlib import Path
-from PIL import Image,ImageDraw,ImageFont
-from .media import run,probe
-from .timeline import RESOLUTIONS,EditPlanV2
-from .config import ROOT
-from .visual_filters import ffmpeg_filters,sharpen_image,strength_at
-from .mix_render import composite,fade_expr
-from .transition_effects import global_items,flashes,plan_flashes,flash_field,sound_windows,ASSETS
 
-FONTS={'DejaVu Sans':ROOT/'apps/web/public/fonts/EditorDejaVu.ttf','Liberation Sans':ROOT/'apps/web/public/fonts/EditorLiberation.ttf','Poppins':ROOT/'apps/web/public/fonts/Poppins-SemiBold.ttf'}
-def text_image(text,style,w,h,words=None,frame=0,scale=1):
-    size=max(1,round(style['size']*w/1080)); font=ImageFont.truetype(str(FONTS[style['font']]),size)
-    canvas=Image.new('RGBA',(w,h));draw=ImageDraw.Draw(canvas);maxwidth=style['width']*w
-    tokens=[(x['text'],style['highlight'] if style['karaoke'] and frame>=x['start'] else style['color']) for x in words] if words else [(x,style['color']) for x in text.split(' ')]
-    lines=[[]];length=0;space=draw.textlength(' ',font=font)
-    for token,color in tokens:
-        for j,part in enumerate(token.split('\n')):
-            if j:lines.append([]);length=0
-            n=draw.textlength(part,font=font)
-            if lines[-1] and length+space+n>maxwidth:lines.append([]);length=0
-            if lines[-1]:length+=space
-            lines[-1].append((part,color,n));length+=n
-    lineheight=size*1.25;top=style['y']*h-len(lines)*lineheight/2
-    for i,line in enumerate(lines):
-        width=sum(x[2] for x in line)+space*max(0,len(line)-1)
-        x=style['x']*w-width/2 if style['align']=='center' else style['x']*w-maxwidth/2 if style['align']=='left' else style['x']*w+maxwidth/2-width
-        for token,color,n in line:
-            draw.text((x,top+i*lineheight+size*.1),token,font=font,fill=color,stroke_width=round(style['outline']*w/1080),stroke_fill='#101010',anchor='lt');x+=n+space
-    if scale!=1:
-        cx,cy=style['x']*w,style['y']*h
-        canvas=canvas.transform((w,h),Image.Transform.AFFINE,(1/scale,0,cx-cx/scale,0,1/scale,cy-cy/scale),Image.Resampling.BICUBIC)
-    if style['rotation']:canvas=canvas.rotate(-style['rotation'],resample=Image.Resampling.BICUBIC,center=(style['x']*w,style['y']*h))
-    if style['opacity']!=1:canvas.putalpha(canvas.getchannel('A').point(lambda p:round(p*style['opacity'])))
+import json, math, shutil
+from pathlib import Path
+from PIL import Image, ImageDraw, ImageFont
+from .media import run, probe
+from .timeline import RESOLUTIONS, EditPlanV2
+from .config import ROOT
+from .visual_filters import ffmpeg_filters, sharpen_image, strength_at
+from .mix_render import composite, fade_expr
+from .transition_effects import (
+    global_items,
+    flashes,
+    plan_flashes,
+    flash_field,
+    sound_windows,
+    ASSETS,
+)
+
+FONTS = {
+    "DejaVu Sans": ROOT / "apps/web/public/fonts/EditorDejaVu.ttf",
+    "Liberation Sans": ROOT / "apps/web/public/fonts/EditorLiberation.ttf",
+    "Poppins": ROOT / "apps/web/public/fonts/Poppins-SemiBold.ttf",
+}
+
+
+def text_image(text, style, w, h, words=None, frame=0, scale=1):
+    size = max(1, round(style["size"] * w / 1080))
+    font = ImageFont.truetype(str(FONTS[style["font"]]), size)
+    canvas = Image.new("RGBA", (w, h))
+    draw = ImageDraw.Draw(canvas)
+    maxwidth = style["width"] * w
+    tokens = (
+        [
+            (
+                x["text"],
+                style["highlight"] if style["karaoke"] and frame >= x["start"] else style["color"],
+            )
+            for x in words
+        ]
+        if words
+        else [(x, style["color"]) for x in text.split(" ")]
+    )
+    lines = [[]]
+    length = 0
+    space = draw.textlength(" ", font=font)
+    for token, color in tokens:
+        for j, part in enumerate(token.split("\n")):
+            if j:
+                lines.append([])
+                length = 0
+            n = draw.textlength(part, font=font)
+            if lines[-1] and length + space + n > maxwidth:
+                lines.append([])
+                length = 0
+            if lines[-1]:
+                length += space
+            lines[-1].append((part, color, n))
+            length += n
+    lineheight = size * 1.25
+    top = style["y"] * h - len(lines) * lineheight / 2
+    for i, line in enumerate(lines):
+        width = sum(x[2] for x in line) + space * max(0, len(line) - 1)
+        x = (
+            style["x"] * w - width / 2
+            if style["align"] == "center"
+            else style["x"] * w - maxwidth / 2
+            if style["align"] == "left"
+            else style["x"] * w + maxwidth / 2 - width
+        )
+        for token, color, n in line:
+            draw.text(
+                (x, top + i * lineheight + size * 0.1),
+                token,
+                font=font,
+                fill=color,
+                stroke_width=round(style["outline"] * w / 1080),
+                stroke_fill="#101010",
+                anchor="lt",
+            )
+            x += n + space
+    if scale != 1:
+        cx, cy = style["x"] * w, style["y"] * h
+        canvas = canvas.transform(
+            (w, h),
+            Image.Transform.AFFINE,
+            (1 / scale, 0, cx - cx / scale, 0, 1 / scale, cy - cy / scale),
+            Image.Resampling.BICUBIC,
+        )
+    if style["rotation"]:
+        canvas = canvas.rotate(
+            -style["rotation"],
+            resample=Image.Resampling.BICUBIC,
+            center=(style["x"] * w, style["y"] * h),
+        )
+    if style["opacity"] != 1:
+        canvas.putalpha(canvas.getchannel("A").point(lambda p: round(p * style["opacity"])))
     return canvas
 
-def overlay_image(segment,global_style,frame,w,h,folder,flash_events=(),absolute_frame=None,filters=()):
-    canvas=Image.new('RGBA',(w,h));items=[]
-    f=frame if absolute_frame is None else absolute_frame
+
+def overlay_image(
+    segment, global_style, frame, w, h, folder, flash_events=(), absolute_frame=None, filters=()
+):
+    canvas = Image.new("RGBA", (w, h))
+    items = []
+    f = frame if absolute_frame is None else absolute_frame
     for event in flash_events:
-        half=event['half']
-        if half and event['frame']-half<=f<=event['frame']+half:
-            strip=Image.frombytes('RGBA',(96,64),flash_field((f-event['frame']+half)/(2*half)))
-            canvas.alpha_composite(strip.resize((w,h),Image.Resampling.BILINEAR))
-    for c in segment['captions']:
-        if c['start']<=frame<c['end']:items.append((0,c))
-    for item in segment['overlays']:
-        if item['start']<=frame<item['end']:items.append((item['layer']+1,item))
-    for _,item in sorted(items,key=lambda x:x[0]):
-        style=item.get('style') or global_style
-        if item.get('kind')=='image':
+        half = event["half"]
+        if half and event["frame"] - half <= f <= event["frame"] + half:
+            strip = Image.frombytes(
+                "RGBA", (96, 64), flash_field((f - event["frame"] + half) / (2 * half))
+            )
+            canvas.alpha_composite(strip.resize((w, h), Image.Resampling.BILINEAR))
+    for c in segment["captions"]:
+        if c["start"] <= frame < c["end"]:
+            items.append((0, c))
+    for item in segment["overlays"]:
+        if item["start"] <= frame < item["end"]:
+            items.append((item["layer"] + 1, item))
+    for _, item in sorted(items, key=lambda x: x[0]):
+        style = item.get("style") or global_style
+        if item.get("kind") == "image":
             from uuid import UUID
-            aid=str(UUID(item['asset_id']));im=Image.open(folder/'assets'/f'{aid}.png').convert('RGBA')
-            im=im.resize((max(1,round(style['width']*w)),max(1,round(style['height']*h))),Image.Resampling.LANCZOS)
-            if style['rotation']:im=im.rotate(-style['rotation'],expand=True,resample=Image.Resampling.BICUBIC)
-            if style['opacity']!=1:im.putalpha(im.getchannel('A').point(lambda p:round(p*style['opacity'])))
-            layer=Image.new('RGBA',(w,h));layer.alpha_composite(im,(round(style['x']*w-im.width/2),round(style['y']*h-im.height/2)))
-            canvas.alpha_composite(sharpen_image(layer,strength_at(filters,'image',f)))
+
+            aid = str(UUID(item["asset_id"]))
+            im = Image.open(folder / "assets" / f"{aid}.png").convert("RGBA")
+            im = im.resize(
+                (max(1, round(style["width"] * w)), max(1, round(style["height"] * h))),
+                Image.Resampling.LANCZOS,
+            )
+            if style["rotation"]:
+                im = im.rotate(-style["rotation"], expand=True, resample=Image.Resampling.BICUBIC)
+            if style["opacity"] != 1:
+                im.putalpha(im.getchannel("A").point(lambda p: round(p * style["opacity"])))
+            layer = Image.new("RGBA", (w, h))
+            layer.alpha_composite(
+                im, (round(style["x"] * w - im.width / 2), round(style["y"] * h - im.height / 2))
+            )
+            canvas.alpha_composite(sharpen_image(layer, strength_at(filters, "image", f)))
         else:
-            words=item.get('words');scale=1
+            words = item.get("words")
+            scale = 1
             if words is not None:
                 from .subtitle_presentation import presentation
-                words,scale=presentation(item,style,frame)
-                if not words:continue
-            canvas.alpha_composite(text_image(item.get('text',''),style,w,h,words,frame,scale))
+
+                words, scale = presentation(item, style, frame)
+                if not words:
+                    continue
+            canvas.alpha_composite(
+                text_image(item.get("text", ""), style, w, h, words, frame, scale)
+            )
     return canvas
 
-def overlay_movie(plan,work,w,h,folder,check,output_size=None,progress=lambda value:None):
-    files=[];index=0;offset=0;previous_percent=-1
-    items,duration=global_items(plan);flash_events=plan_flashes(plan)
-    for segment in plan['segments']:
-        points={0,segment['duration']}
-        for flt in plan.get('filters',[]):
-            if 'image' in flt['targets']:
-                points.update(max(0,min(segment['duration'],f-offset)) for f in (flt['start'],flt['end']))
+
+def overlay_movie(plan, work, w, h, folder, check, output_size=None, progress=lambda value: None):
+    files = []
+    index = 0
+    offset = 0
+    previous_percent = -1
+    items, duration = global_items(plan)
+    flash_events = plan_flashes(plan)
+    for segment in plan["segments"]:
+        points = {0, segment["duration"]}
+        for flt in plan.get("filters", []):
+            if "image" in flt["targets"]:
+                points.update(
+                    max(0, min(segment["duration"], f - offset)) for f in (flt["start"], flt["end"])
+                )
         for e in flash_events:
-            if e['half']:
-                points.update(f-offset for f in range(max(offset,e['frame']-e['half']),min(offset+segment['duration'],e['frame']+e['half'])+1))
-        for c in segment['captions']:
+            if e["half"]:
+                points.update(
+                    f - offset
+                    for f in range(
+                        max(offset, e["frame"] - e["half"]),
+                        min(offset + segment["duration"], e["frame"] + e["half"]) + 1,
+                    )
+                )
+        for c in segment["captions"]:
             from .subtitle_presentation import change_points
-            points.update(change_points(c,c.get('style') or plan['subtitle_style']))
-        for o in segment['overlays']:points.update((o['start'],o['end']))
-        points=sorted(points)
-        for a,b in zip(points,points[1:]):
-            check();percent=round((offset+a)/duration*100)
-            if percent!=previous_percent:progress(percent);previous_percent=percent
-            p=work/f'overlay-{index:05}.png';index+=1
-            image=overlay_image(segment,plan['subtitle_style'],a,w,h,folder,flash_events,a+offset,plan.get('filters',[]))
-            if output_size and output_size!=(w,h):image=image.resize(output_size,Image.Resampling.LANCZOS)
+
+            points.update(change_points(c, c.get("style") or plan["subtitle_style"]))
+        for o in segment["overlays"]:
+            points.update((o["start"], o["end"]))
+        points = sorted(points)
+        for a, b in zip(points, points[1:]):
+            check()
+            percent = round((offset + a) / duration * 100)
+            if percent != previous_percent:
+                progress(percent)
+                previous_percent = percent
+            p = work / f"overlay-{index:05}.png"
+            index += 1
+            image = overlay_image(
+                segment,
+                plan["subtitle_style"],
+                a,
+                w,
+                h,
+                folder,
+                flash_events,
+                a + offset,
+                plan.get("filters", []),
+            )
+            if output_size and output_size != (w, h):
+                image = image.resize(output_size, Image.Resampling.LANCZOS)
             image.save(p)
-            files.extend([f"file '{p.resolve()}'",'option framerate 30',f'duration {(b-a)/30:.12f}'])
-        offset+=segment['duration']
-    files.extend([files[-3],'option framerate 30']);listing=work/'overlays.txt';listing.write_text('\n'.join(files))
-    out=work/'overlays.mov'
-    run(['ffmpeg','-y','-v','error','-threads','2','-f','concat','-safe','0','-i',str(listing),'-vf','fps=30','-frames:v',str(sum(s['duration'] for s in plan['segments'])),'-c:v','qtrle','-threads','2','-pix_fmt','argb',str(out)],check)
+            files.extend(
+                [f"file '{p.resolve()}'", "option framerate 30", f"duration {(b - a) / 30:.12f}"]
+            )
+        offset += segment["duration"]
+    files.extend([files[-3], "option framerate 30"])
+    listing = work / "overlays.txt"
+    listing.write_text("\n".join(files))
+    out = work / "overlays.mov"
+    run(
+        [
+            "ffmpeg",
+            "-y",
+            "-v",
+            "error",
+            "-threads",
+            "2",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            str(listing),
+            "-vf",
+            "fps=30",
+            "-frames:v",
+            str(sum(s["duration"] for s in plan["segments"])),
+            "-c:v",
+            "qtrle",
+            "-threads",
+            "2",
+            "-pix_fmt",
+            "argb",
+            str(out),
+        ],
+        check,
+    )
     return out
 
-def render_v2(source,plan,out,preview=False,check=lambda:None,ratio='9:16',resolution=1080,progress=lambda stage,value:None):
+
+def render_v2(
+    source,
+    plan,
+    out,
+    preview=False,
+    check=lambda: None,
+    ratio="9:16",
+    resolution=1080,
+    progress=lambda stage, value: None,
+):
     from .boundaries import normalize
-    plan=normalize(EditPlanV2.model_validate(plan).model_dump());w,h=RESOLUTIONS[ratio]
-    target_w,target_h=w,h
+
+    plan = normalize(EditPlanV2.model_validate(plan).model_dump())
+    w, h = RESOLUTIONS[ratio]
+    target_w, target_h = w, h
     from .export_options import dimensions
-    output_w,output_h=dimensions(ratio,360 if preview else resolution)
-    filtered=any(f['strength'] and f['targets'] for f in plan['filters'])
-    if not filtered:w,h=output_w,output_h
-    work=out.parent/(out.stem+'-work');work.mkdir(exist_ok=True);parts=[]
-    info=probe(source);audio=any(x['codec_type']=='audio' for x in info['streams'])
-    segment_offset=0
-    for i,s in enumerate(plan['segments']):
-        check();progress('Menyiapkan potongan video',15+round(i/max(1,len(plan['segments']))*15));t=s['transform'];ph=h//2 if t['mode']=='split' else h
+
+    output_w, output_h = dimensions(ratio, 360 if preview else resolution)
+    filtered = any(f["strength"] and f["targets"] for f in plan["filters"])
+    if not filtered:
+        w, h = output_w, output_h
+    work = out.parent / (out.stem + "-work")
+    work.mkdir(exist_ok=True)
+    parts = []
+    info = probe(source)
+    audio = any(x["codec_type"] == "audio" for x in info["streams"])
+    segment_offset = 0
+    for i, s in enumerate(plan["segments"]):
+        check()
+        progress("Menyiapkan potongan video", 15 + round(i / max(1, len(plan["segments"])) * 15))
+        t = s["transform"]
+        ph = h // 2 if t["mode"] == "split" else h
+
         def pane(x):
-            mode='decrease' if t['mode']=='fit' else 'increase'
-            sw=math.ceil(w*t['scale']/2)*2;sh=math.ceil(ph*t['scale']/2)*2
-            xpos=f'max(0,min(iw-ow,iw*{x}-ow/2))' if t.get('legacy_center') else f'(iw-ow)*{x}'
-            return f"format=rgba,scale={sw}:{sh}:force_original_aspect_ratio={mode}:force_divisible_by=2,pad=max(iw\\,{w}):max(ih\\,{ph}):(ow-iw)*{x if not t.get('legacy_center') else .5}:(oh-ih)*{t['y']}:black,crop={w}:{ph}:exact=1:x='{xpos}':y='(ih-oh)*{t['y']}',setsar=1,format=rgba"
-        base='fps=30,setpts=PTS-STARTPTS'
-        if t['mode']=='split':vf=f'[0:v]{base},split=2[a][b];[a]{pane(t["x"])}[top];[b]{pane(t["b"])}[bottom];[top][bottom]vstack[v]'
-        else:vf=f'[0:v]{base},{pane(t["x"])}[v]'
-        chain=ffmpeg_filters(plan['filters'],'podcast',segment_offset)
-        if chain:vf=vf.replace('[v]','[vraw]')+';[vraw]'+chain+'[v]'
-        segment_offset+=s['duration']
-        dur=s['duration']/30;target=work/f'{i:03}.mkv'
-        args=['ffmpeg','-y','-v','error','-threads','2','-ss',str(s['source_in']/30),'-i',str(source)]
-        if not audio:args+=['-f','lavfi','-i','anullsrc=r=48000:cl=stereo']
-        vf+=f';[{"0" if audio else "1"}:a]aresample=48000,asetpts=PTS-STARTPTS,apad,atrim=duration={dur}[aout]'
-        args+=['-filter_complex_threads','1','-filter_complex',vf,'-map','[v]','-map','[aout]','-t',str(dur),'-c:v','libx264','-threads','2','-preset','veryfast','-crf','20','-pix_fmt','yuv420p','-c:a','pcm_s16le','-ar','48000','-ac','2',str(target)]
-        run(args,check);parts.append(target)
-    listing=work/'parts.txt';listing.write_text('\n'.join(f"file '{p.resolve()}'\nduration {s['duration']/30:.12f}" for p,s in zip(parts,plan['segments'])))
-    overlays=overlay_movie(plan,work,target_w,target_h,source.parent,check,output_size=(w,h),progress=lambda value:progress('Menyusun subtitle dan overlay',30+round(value*.45)))
-    tmp=out.with_suffix('.partial.mp4');duration=sum(s['duration'] for s in plan['segments'])/30
-    progress('Menyusun video dan transisi',78)
-    visual_base=None
-    if any(s['broll'] for s in plan['segments']):
-        joined=work/'joined.mkv'
-        run(['ffmpeg','-y','-v','error','-f','concat','-safe','0','-i',str(listing),'-c','copy',str(joined)],check)
-        offset=0;items=[]
-        for segment in plan['segments']:
-            items.extend({**b,'start':b['start']+offset,'end':b['end']+offset} for b in segment['broll']);offset+=segment['duration']
-        if plan.get('transition_version')==1:
-            items=[dict(b,transition_in={'kind':'none','frames':0},transition_out={'kind':'none','frames':0}) for b in items]
-        visual_base=composite(joined,{'duration':offset,'broll':items,'filters':plan['filters']},work/'mixed.mkv',w,h,check)
-    if plan.get('transition_version')==1:
+            mode = "decrease" if t["mode"] == "fit" else "increase"
+            sw = math.ceil(w * t["scale"] / 2) * 2
+            sh = math.ceil(ph * t["scale"] / 2) * 2
+            xpos = f"max(0,min(iw-ow,iw*{x}-ow/2))" if t.get("legacy_center") else f"(iw-ow)*{x}"
+            return f"format=rgba,scale={sw}:{sh}:force_original_aspect_ratio={mode}:force_divisible_by=2,pad=max(iw\\,{w}):max(ih\\,{ph}):(ow-iw)*{x if not t.get('legacy_center') else 0.5}:(oh-ih)*{t['y']}:black,crop={w}:{ph}:exact=1:x='{xpos}':y='(ih-oh)*{t['y']}',setsar=1,format=rgba"
+
+        base = "fps=30,setpts=PTS-STARTPTS"
+        if t["mode"] == "split":
+            vf = f"[0:v]{base},split=2[a][b];[a]{pane(t['x'])}[top];[b]{pane(t['b'])}[bottom];[top][bottom]vstack[v]"
+        else:
+            vf = f"[0:v]{base},{pane(t['x'])}[v]"
+        chain = ffmpeg_filters(plan["filters"], "podcast", segment_offset)
+        if chain:
+            vf = vf.replace("[v]", "[vraw]") + ";[vraw]" + chain + "[v]"
+        segment_offset += s["duration"]
+        dur = s["duration"] / 30
+        target = work / f"{i:03}.mkv"
+        args = [
+            "ffmpeg",
+            "-y",
+            "-v",
+            "error",
+            "-threads",
+            "2",
+            "-ss",
+            str(s["source_in"] / 30),
+            "-i",
+            str(source),
+        ]
+        if not audio:
+            args += ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]
+        vf += f";[{'0' if audio else '1'}:a]aresample=48000,asetpts=PTS-STARTPTS,apad,atrim=duration={dur}[aout]"
+        args += [
+            "-filter_complex_threads",
+            "1",
+            "-filter_complex",
+            vf,
+            "-map",
+            "[v]",
+            "-map",
+            "[aout]",
+            "-t",
+            str(dur),
+            "-c:v",
+            "libx264",
+            "-threads",
+            "2",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "20",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "pcm_s16le",
+            "-ar",
+            "48000",
+            "-ac",
+            "2",
+            str(target),
+        ]
+        run(args, check)
+        parts.append(target)
+    listing = work / "parts.txt"
+    listing.write_text(
+        "\n".join(
+            f"file '{p.resolve()}'\nduration {s['duration'] / 30:.12f}"
+            for p, s in zip(parts, plan["segments"])
+        )
+    )
+    overlays = overlay_movie(
+        plan,
+        work,
+        target_w,
+        target_h,
+        source.parent,
+        check,
+        output_size=(w, h),
+        progress=lambda value: progress("Menyusun subtitle dan overlay", 30 + round(value * 0.45)),
+    )
+    tmp = out.with_suffix(".partial.mp4")
+    duration = sum(s["duration"] for s in plan["segments"]) / 30
+    progress("Menyusun video dan transisi", 78)
+    visual_base = None
+    if any(s["broll"] for s in plan["segments"]):
+        joined = work / "joined.mkv"
+        run(
+            [
+                "ffmpeg",
+                "-y",
+                "-v",
+                "error",
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-i",
+                str(listing),
+                "-c",
+                "copy",
+                str(joined),
+            ],
+            check,
+        )
+        offset = 0
+        items = []
+        for segment in plan["segments"]:
+            items.extend(
+                {**b, "start": b["start"] + offset, "end": b["end"] + offset}
+                for b in segment["broll"]
+            )
+            offset += segment["duration"]
+        if plan.get("transition_version") == 1:
+            items = [
+                dict(
+                    b,
+                    transition_in={"kind": "none", "frames": 0},
+                    transition_out={"kind": "none", "frames": 0},
+                )
+                for b in items
+            ]
+        visual_base = composite(
+            joined,
+            {"duration": offset, "broll": items, "filters": plan["filters"]},
+            work / "mixed.mkv",
+            w,
+            h,
+            check,
+        )
+    if plan.get("transition_version") == 1:
         from .boundary_render import apply
+
         if visual_base is None:
-            visual_base=work/'joined.mkv'
-            run(['ffmpeg','-y','-v','error','-f','concat','-safe','0','-i',str(listing),'-c','copy',str(visual_base)],check)
-        visual_base=apply(visual_base,source,plan,work/'transitioned.mkv',w,h,round(float(info['format']['duration'])*30),check)
-    inputs=[];filters=[f'[0:v]fps=30,settb=1/30,setpts=N,tpad=stop_mode=clone:stop_duration=0.1,trim=end_frame={round(duration*30)}[basevideo];[basevideo][1:v]overlay=eof_action=repeat:format=auto,format=yuv420p[v]',f"[0:a]volume='{plan['source_volume']}*({fade_expr(plan['source_fade'],round(duration*30))})':eval=frame[baseaudio]"];labels=['[baseaudio]'];offset=0
+            visual_base = work / "joined.mkv"
+            run(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-v",
+                    "error",
+                    "-f",
+                    "concat",
+                    "-safe",
+                    "0",
+                    "-i",
+                    str(listing),
+                    "-c",
+                    "copy",
+                    str(visual_base),
+                ],
+                check,
+            )
+        visual_base = apply(
+            visual_base,
+            source,
+            plan,
+            work / "transitioned.mkv",
+            w,
+            h,
+            round(float(info["format"]["duration"]) * 30),
+            check,
+        )
+    inputs = []
+    filters = [
+        f"[0:v]fps=30,settb=1/30,setpts=N,tpad=stop_mode=clone:stop_duration=0.1,trim=end_frame={round(duration * 30)}[basevideo];[basevideo][1:v]overlay=eof_action=repeat:format=auto,format=yuv420p[v]",
+        f"[0:a]volume='{plan['source_volume']}*({fade_expr(plan['source_fade'], round(duration * 30))})':eval=frame[baseaudio]",
+    ]
+    labels = ["[baseaudio]"]
+    offset = 0
     from uuid import UUID
-    for segment in plan['segments']:
-        for item in segment['audio']:
-            index=2+len(inputs)//2;asset=source.parent/'audio'/f"{str(UUID(item['asset_id']))}.m4a"
-            if not asset.is_file():raise RuntimeError('Audio tambahan tidak ditemukan pada proyek ini.')
-            inputs+=['-i',str(asset)];label=f'audio{index}'
-            a=item['source_in']/30;b=(item['source_in']+item['end']-item['start'])/30;delay=round((offset+item['start'])*1000/30)
-            filters.append(f"[{index}:a]atrim=start={a}:end={b},asetpts=PTS-STARTPTS,volume='{item['volume']}*({fade_expr(item['fade'],item['end']-item['start'])})':eval=frame,adelay={delay}:all=1[{label}]");labels.append(f'[{label}]')
-        offset+=segment['duration']
-    windows=sound_windows(plan)
+
+    for segment in plan["segments"]:
+        for item in segment["audio"]:
+            index = 2 + len(inputs) // 2
+            asset = source.parent / "audio" / f"{str(UUID(item['asset_id']))}.m4a"
+            if not asset.is_file():
+                raise RuntimeError("Audio tambahan tidak ditemukan pada proyek ini.")
+            inputs += ["-i", str(asset)]
+            label = f"audio{index}"
+            a = item["source_in"] / 30
+            b = (item["source_in"] + item["end"] - item["start"]) / 30
+            delay = round((offset + item["start"]) * 1000 / 30)
+            filters.append(
+                f"[{index}:a]atrim=start={a}:end={b},asetpts=PTS-STARTPTS,volume='{item['volume']}*({fade_expr(item['fade'], item['end'] - item['start'])})':eval=frame,adelay={delay}:all=1[{label}]"
+            )
+            labels.append(f"[{label}]")
+        offset += segment["duration"]
+    windows = sound_windows(plan)
     if windows:
-        index=2+len(inputs)//2;inputs+=['-i',str(ASSETS/'camera_shutter.wav')]
-        filters.append(f'[{index}:a]asplit={len(windows)}'+''.join(f'[shutter{i}]' for i in range(len(windows))))
-        for i,event in enumerate(windows):
-            label=f'sfx{i}'
-            filters.append(f"[shutter{i}]atrim=start_sample={event['skip']}:end_sample={event['skip']+event['length']},asetpts=PTS-STARTPTS,volume={event['volume']},adelay={event['start']}S:all=1[{label}]")
-            labels.append(f'[{label}]')
-    if filtered and (output_w,output_h)!=(w,h):
-        rw,rh=output_w,output_h
-        filters[0]=filters[0].replace('format=yuv420p[v]',f'format=yuv420p,scale={rw}:{rh}[v]')
-    progress('Encoding MP4',90)
-    filters.append(''.join(labels)+f'amix=inputs={len(labels)}:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.98:level=0:latency=1,apad,atrim=duration={duration}[audioout]')
-    run(['ffmpeg','-y','-v','error','-threads','2',*(['-i',str(visual_base)] if visual_base else ['-f','concat','-safe','0','-i',str(listing)]),'-i',str(overlays),*inputs,'-filter_complex_threads','1','-filter_complex',';'.join(filters),'-map','[v]','-map','[audioout]','-t',str(duration),'-c:v','libx264','-threads','2','-preset','veryfast','-crf','25' if preview or resolution==360 else '20','-c:a','aac','-b:a','160k','-movflags','+faststart',str(tmp)],check)
-    tmp.replace(out);shutil.rmtree(work)
+        index = 2 + len(inputs) // 2
+        inputs += ["-i", str(ASSETS / "camera_shutter.wav")]
+        filters.append(
+            f"[{index}:a]asplit={len(windows)}"
+            + "".join(f"[shutter{i}]" for i in range(len(windows)))
+        )
+        for i, event in enumerate(windows):
+            label = f"sfx{i}"
+            filters.append(
+                f"[shutter{i}]atrim=start_sample={event['skip']}:end_sample={event['skip'] + event['length']},asetpts=PTS-STARTPTS,volume={event['volume']},adelay={event['start']}S:all=1[{label}]"
+            )
+            labels.append(f"[{label}]")
+    if filtered and (output_w, output_h) != (w, h):
+        rw, rh = output_w, output_h
+        filters[0] = filters[0].replace("format=yuv420p[v]", f"format=yuv420p,scale={rw}:{rh}[v]")
+    progress("Encoding MP4", 90)
+    filters.append(
+        "".join(labels)
+        + f"amix=inputs={len(labels)}:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.98:level=0:latency=1,apad,atrim=duration={duration}[audioout]"
+    )
+    run(
+        [
+            "ffmpeg",
+            "-y",
+            "-v",
+            "error",
+            "-threads",
+            "2",
+            *(
+                ["-i", str(visual_base)]
+                if visual_base
+                else ["-f", "concat", "-safe", "0", "-i", str(listing)]
+            ),
+            "-i",
+            str(overlays),
+            *inputs,
+            "-filter_complex_threads",
+            "1",
+            "-filter_complex",
+            ";".join(filters),
+            "-map",
+            "[v]",
+            "-map",
+            "[audioout]",
+            "-t",
+            str(duration),
+            "-c:v",
+            "libx264",
+            "-threads",
+            "2",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "25" if preview or resolution == 360 else "20",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "160k",
+            "-movflags",
+            "+faststart",
+            str(tmp),
+        ],
+        check,
+    )
+    tmp.replace(out)
+    shutil.rmtree(work)

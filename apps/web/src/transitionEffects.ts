@@ -1,14 +1,138 @@
-import {boundaries,boundaryEvents} from './boundaries';
-import {globalBroll,total,type Broll,type Plan,type Transition} from './editorModel';
-export type Effect={id:string;name:string;audio_url:string;duration:number;samples:number;sample_rate:number};
-type Edge={frame:number;out:boolean;item:Broll;edge:Transition};
-const edges=(items:Broll[]):Edge[]=>items.flatMap(item=>[false,true].map(out=>({frame:out?item.end:item.start,out,item,edge:out?item.transition_out:item.transition_in})));
-function select(events:Edge[],predicate:(e:Transition)=>boolean){const chosen=new Map<number,Edge>();for(const e of events)if(predicate(e.edge)&&(!chosen.has(e.frame)||e.out))chosen.set(e.frame,e);return [...chosen.values()].sort((a,b)=>a.frame-b.frame)}
-export function flashes(items:Broll[],duration:number){const merged:Broll[]=[];for(const item of [...items].sort((a,b)=>a.start-b.start)){const last=merged.at(-1);if(last&&last.end===item.start&&last.asset_id===item.asset_id&&last.source_in+last.end-last.start===item.source_in&&JSON.stringify(last.transform)===JSON.stringify(item.transform)&&[last.transition_out,item.transition_in].every(e=>e.kind==='none'&&(!e.sound||e.sound==='none'))){last.end=item.end;last.transition_out=item.transition_out}else merged.push({...item})}const events=edges(merged),bounds=[...new Set([0,duration,...events.map(e=>e.frame)])];return select(events,e=>e.kind==='flash').map(e=>{const frame=e.frame,requested=e.edge.frames/2,distance=Math.min(...bounds.filter(b=>b!==frame).map(b=>Math.abs(frame-b)/2));return {frame,requested,half:Math.floor(Math.min(requested,frame,duration-frame,distance,(e.item.end-e.item.start)/2))}})}
-export function flashField(progress:number){const p=Math.max(0,Math.min(1,progress)),ease=p*p*(3-2*p),envelope=Math.sin(Math.PI*p)**2,cx=-.15+1.3*ease,data=new Uint8ClampedArray(96*64*4);for(let y=0;y<64;y++)for(let x=0;x<96;x++){const u=x/95,v=y/63,glow=Math.exp(-(((u-cx)/.75)**2+((v-.42)/.95)**2)),secondary=Math.exp(-(((u-(1-cx))/.95)**2+((v-.85)/.8)**2)),alpha=.6*envelope*Math.min(1,.22+.6*glow+.18*secondary);data.set([255,Math.floor(218+25*glow+.5),Math.floor(188+31*glow+.5),Math.floor(alpha*255+.5)],(y*96+x)*4)}return data}
-export const soundEvents=(items:Broll[])=>select(edges(items),e=>e.sound==='camera_shutter').map(e=>({frame:e.frame,volume:e.edge.sound_volume??1,id:e.item.id,out:e.out}));
-export const planSoundEvents=(plan:Plan)=>plan.transition_version===1?boundaries(plan).filter(e=>e.value.sound==='camera_shutter').map(e=>({frame:e.frame,volume:e.value.sound_volume??1,id:e.id,out:false})):soundEvents(globalBroll(plan));
-export const planFlashes=(plan:Plan)=>plan.transition_version===1?boundaryEvents(plan).filter(e=>e.kind==='flash'):flashes(globalBroll(plan),total(plan));
-export function soundWindows(plan:Plan,samples:number,rate:number){const end=total(plan)*rate/30;return planSoundEvents(plan).map(e=>{const raw=Math.floor(e.frame*rate/30-samples/2+.5),skip=Math.max(0,-raw),start=Math.max(0,raw);return {...e,start,skip,length:Math.min(samples-skip,end-start)}}).filter(e=>e.length>0)}
-let stripCanvas:HTMLCanvasElement|undefined;
-export function paintFlash(ctx:CanvasRenderingContext2D,plan:Plan,frame:number,w:number,h:number){for(const e of planFlashes(plan)){if(!e.half||frame<e.frame-e.half||frame>e.frame+e.half)continue;stripCanvas??=document.createElement('canvas');stripCanvas.width=96;stripCanvas.height=64;stripCanvas.getContext('2d')!.putImageData(new ImageData(flashField((frame-e.frame+e.half)/(2*e.half)),96,64),0,0);ctx.save();ctx.imageSmoothingEnabled=true;ctx.drawImage(stripCanvas,0,0,w,h);ctx.restore()}}
+import { boundaries, boundaryEvents } from './boundaries';
+import { globalBroll, total, type Broll, type Plan, type Transition } from './editorModel';
+export type Effect = {
+  id: string;
+  name: string;
+  audio_url: string;
+  duration: number;
+  samples: number;
+  sample_rate: number;
+};
+type Edge = { frame: number; out: boolean; item: Broll; edge: Transition };
+const edges = (items: Broll[]): Edge[] =>
+  items.flatMap((item) =>
+    [false, true].map((out) => ({
+      frame: out ? item.end : item.start,
+      out,
+      item,
+      edge: out ? item.transition_out : item.transition_in,
+    })),
+  );
+function select(events: Edge[], predicate: (e: Transition) => boolean) {
+  const chosen = new Map<number, Edge>();
+  for (const e of events)
+    if (predicate(e.edge) && (!chosen.has(e.frame) || e.out)) chosen.set(e.frame, e);
+  return [...chosen.values()].sort((a, b) => a.frame - b.frame);
+}
+export function flashes(items: Broll[], duration: number) {
+  const merged: Broll[] = [];
+  for (const item of [...items].sort((a, b) => a.start - b.start)) {
+    const last = merged.at(-1);
+    if (
+      last &&
+      last.end === item.start &&
+      last.asset_id === item.asset_id &&
+      last.source_in + last.end - last.start === item.source_in &&
+      JSON.stringify(last.transform) === JSON.stringify(item.transform) &&
+      [last.transition_out, item.transition_in].every(
+        (e) => e.kind === 'none' && (!e.sound || e.sound === 'none'),
+      )
+    ) {
+      last.end = item.end;
+      last.transition_out = item.transition_out;
+    } else merged.push({ ...item });
+  }
+  const events = edges(merged),
+    bounds = [...new Set([0, duration, ...events.map((e) => e.frame)])];
+  return select(events, (e) => e.kind === 'flash').map((e) => {
+    const frame = e.frame,
+      requested = e.edge.frames / 2,
+      distance = Math.min(...bounds.filter((b) => b !== frame).map((b) => Math.abs(frame - b) / 2));
+    return {
+      frame,
+      requested,
+      half: Math.floor(
+        Math.min(requested, frame, duration - frame, distance, (e.item.end - e.item.start) / 2),
+      ),
+    };
+  });
+}
+export function flashField(progress: number) {
+  const p = Math.max(0, Math.min(1, progress)),
+    ease = p * p * (3 - 2 * p),
+    envelope = Math.sin(Math.PI * p) ** 2,
+    cx = -0.15 + 1.3 * ease,
+    data = new Uint8ClampedArray(96 * 64 * 4);
+  for (let y = 0; y < 64; y++)
+    for (let x = 0; x < 96; x++) {
+      const u = x / 95,
+        v = y / 63,
+        glow = Math.exp(-(((u - cx) / 0.75) ** 2 + ((v - 0.42) / 0.95) ** 2)),
+        secondary = Math.exp(-(((u - (1 - cx)) / 0.95) ** 2 + ((v - 0.85) / 0.8) ** 2)),
+        alpha = 0.6 * envelope * Math.min(1, 0.22 + 0.6 * glow + 0.18 * secondary);
+      data.set(
+        [
+          255,
+          Math.floor(218 + 25 * glow + 0.5),
+          Math.floor(188 + 31 * glow + 0.5),
+          Math.floor(alpha * 255 + 0.5),
+        ],
+        (y * 96 + x) * 4,
+      );
+    }
+  return data;
+}
+export const soundEvents = (items: Broll[]) =>
+  select(edges(items), (e) => e.sound === 'camera_shutter').map((e) => ({
+    frame: e.frame,
+    volume: e.edge.sound_volume ?? 1,
+    id: e.item.id,
+    out: e.out,
+  }));
+export const planSoundEvents = (plan: Plan) =>
+  plan.transition_version === 1
+    ? boundaries(plan)
+        .filter((e) => e.value.sound === 'camera_shutter')
+        .map((e) => ({ frame: e.frame, volume: e.value.sound_volume ?? 1, id: e.id, out: false }))
+    : soundEvents(globalBroll(plan));
+export const planFlashes = (plan: Plan) =>
+  plan.transition_version === 1
+    ? boundaryEvents(plan).filter((e) => e.kind === 'flash')
+    : flashes(globalBroll(plan), total(plan));
+export function soundWindows(plan: Plan, samples: number, rate: number) {
+  const end = (total(plan) * rate) / 30;
+  return planSoundEvents(plan)
+    .map((e) => {
+      const raw = Math.floor((e.frame * rate) / 30 - samples / 2 + 0.5),
+        skip = Math.max(0, -raw),
+        start = Math.max(0, raw);
+      return { ...e, start, skip, length: Math.min(samples - skip, end - start) };
+    })
+    .filter((e) => e.length > 0);
+}
+let stripCanvas: HTMLCanvasElement | undefined;
+export function paintFlash(
+  ctx: CanvasRenderingContext2D,
+  plan: Plan,
+  frame: number,
+  w: number,
+  h: number,
+) {
+  for (const e of planFlashes(plan)) {
+    if (!e.half || frame < e.frame - e.half || frame > e.frame + e.half) continue;
+    stripCanvas ??= document.createElement('canvas');
+    stripCanvas.width = 96;
+    stripCanvas.height = 64;
+    stripCanvas
+      .getContext('2d')!
+      .putImageData(
+        new ImageData(flashField((frame - e.frame + e.half) / (2 * e.half)), 96, 64),
+        0,
+        0,
+      );
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(stripCanvas, 0, 0, w, h);
+    ctx.restore();
+  }
+}

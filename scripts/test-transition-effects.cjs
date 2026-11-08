@@ -1,6 +1,88 @@
 require('./register-ts.cjs');
-const fs=require('fs'),path=require('path'),Module=require('module'),assert=require('node:assert/strict'),cp=require('child_process'),ts=require('../apps/web/node_modules/typescript');
-function load(name){const file=path.resolve(__dirname,'../apps/web/src/'+name+'.ts'),m=new Module(file,module);m.require=(id)=>id==='./editorModel'?E:id==='./boundaries'?require('../apps/web/src/boundaries.ts'):require(id);m._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,file);return m.exports}const E=load('editorModel'),F=load('transitionEffects'),p=E.blankPlan(12),b={id:'b',asset_id:'a',start:300,end:330,source_in:0,transform:p.segments[0].transform,transition_in:{kind:'flash',frames:12,sound:'camera_shutter',sound_volume:.5},transition_out:{kind:'flash',frames:12,sound:'camera_shutter'}};p.segments[0].broll=[b];
-const expected=JSON.parse(cp.execFileSync(path.resolve(__dirname,'../.venv/bin/python'),['-c',"import sys,json;from app.transition_effects import *;p=json.load(sys.stdin);items,d=global_items(p);print(json.dumps(dict(flashes=flashes(items,d),sound=sound_windows(p),strips=[list(flash_field(i/12)) for i in range(13)])))"],{maxBuffer:4*1024*1024,cwd:path.resolve(__dirname,'..'),env:{...process.env,PYTHONPATH:'backend'},input:JSON.stringify(p),encoding:'utf8'}));
-assert.deepEqual(F.flashes(E.globalBroll(p),E.total(p)),expected.flashes);assert.deepEqual(F.soundWindows(p,12261,48000).map(({frame,start,skip,length,volume})=>({frame,start,skip,length,volume})),expected.sound);for(let i=0;i<13;i++)assert.deepEqual([...F.flashField(i/12)],expected.strips[i]);
-assert.deepEqual(E.brollWeights(b,[b],360,360,300),{base:0,clip:1});const flashBefore=F.flashes(E.globalBroll(p),E.total(p));const before=F.soundEvents(E.globalBroll(p));E.splitSegment(p,302);assert.deepEqual(F.flashes(E.globalBroll(p),E.total(p)),flashBefore);assert.equal(F.soundEvents(E.globalBroll(p)).length,2);assert.deepEqual(F.soundEvents(E.globalBroll(p)).map(x=>x.frame),before.map(x=>x.frame));assert.equal(p.segments[0].broll[0].transition_out.sound,undefined);assert.equal(p.segments[1].broll[0].transition_in.sound,undefined);const duplicated=E.duplicateItem(p,{kind:'video',id:p.segments[0].id,segmentId:p.segments[0].id});assert(duplicated);assert.equal(F.soundEvents(E.globalBroll(p)).length,3);console.log('PASS: flash raster/time and sample windows Python/TS parity; split and duplication preserve effects');
+const fs = require('fs'),
+  path = require('path'),
+  Module = require('module'),
+  assert = require('node:assert/strict'),
+  cp = require('child_process'),
+  ts = require('../apps/web/node_modules/typescript');
+function load(name) {
+  const file = path.resolve(__dirname, '../apps/web/src/' + name + '.ts'),
+    m = new Module(file, module);
+  m.require = (id) =>
+    id === './editorModel'
+      ? E
+      : id === './boundaries'
+        ? require('../apps/web/src/boundaries.ts')
+        : require(id);
+  m._compile(
+    ts.transpileModule(fs.readFileSync(file, 'utf8'), {
+      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    }).outputText,
+    file,
+  );
+  return m.exports;
+}
+const E = load('editorModel'),
+  F = load('transitionEffects'),
+  p = E.blankPlan(12),
+  b = {
+    id: 'b',
+    asset_id: 'a',
+    start: 300,
+    end: 330,
+    source_in: 0,
+    transform: p.segments[0].transform,
+    transition_in: { kind: 'flash', frames: 12, sound: 'camera_shutter', sound_volume: 0.5 },
+    transition_out: { kind: 'flash', frames: 12, sound: 'camera_shutter' },
+  };
+p.segments[0].broll = [b];
+const expected = JSON.parse(
+  cp.execFileSync(
+    path.resolve(__dirname, '../.venv/bin/python'),
+    [
+      '-c',
+      'import sys,json;from app.transition_effects import *;p=json.load(sys.stdin);items,d=global_items(p);print(json.dumps(dict(flashes=flashes(items,d),sound=sound_windows(p),strips=[list(flash_field(i/12)) for i in range(13)])))',
+    ],
+    {
+      maxBuffer: 4 * 1024 * 1024,
+      cwd: path.resolve(__dirname, '..'),
+      env: { ...process.env, PYTHONPATH: 'backend' },
+      input: JSON.stringify(p),
+      encoding: 'utf8',
+    },
+  ),
+);
+assert.deepEqual(F.flashes(E.globalBroll(p), E.total(p)), expected.flashes);
+assert.deepEqual(
+  F.soundWindows(p, 12261, 48000).map(({ frame, start, skip, length, volume }) => ({
+    frame,
+    start,
+    skip,
+    length,
+    volume,
+  })),
+  expected.sound,
+);
+for (let i = 0; i < 13; i++) assert.deepEqual([...F.flashField(i / 12)], expected.strips[i]);
+assert.deepEqual(E.brollWeights(b, [b], 360, 360, 300), { base: 0, clip: 1 });
+const flashBefore = F.flashes(E.globalBroll(p), E.total(p));
+const before = F.soundEvents(E.globalBroll(p));
+E.splitSegment(p, 302);
+assert.deepEqual(F.flashes(E.globalBroll(p), E.total(p)), flashBefore);
+assert.equal(F.soundEvents(E.globalBroll(p)).length, 2);
+assert.deepEqual(
+  F.soundEvents(E.globalBroll(p)).map((x) => x.frame),
+  before.map((x) => x.frame),
+);
+assert.equal(p.segments[0].broll[0].transition_out.sound, undefined);
+assert.equal(p.segments[1].broll[0].transition_in.sound, undefined);
+const duplicated = E.duplicateItem(p, {
+  kind: 'video',
+  id: p.segments[0].id,
+  segmentId: p.segments[0].id,
+});
+assert(duplicated);
+assert.equal(F.soundEvents(E.globalBroll(p)).length, 3);
+console.log(
+  'PASS: flash raster/time and sample windows Python/TS parity; split and duplication preserve effects',
+);

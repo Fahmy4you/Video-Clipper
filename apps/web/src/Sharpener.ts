@@ -1,12 +1,136 @@
 // One bounded GPU surface per visual category. No GPU readback during normal playback.
-export function sharpenPixels(input:Uint8ClampedArray,w:number,h:number,strength:number){const out=new Uint8ClampedArray(input);for(let y=0;y<h;y++)for(let x=0;x<w;x++){const at=(y*w+x)*4;let weight=0;const sum=[0,0,0];for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const n=(Math.max(0,Math.min(h-1,y+dy))*w+Math.max(0,Math.min(w-1,x+dx)))*4,k=(dx===0?2:1)*(dy===0?2:1)*input[n+3]/255;weight+=k;for(let c=0;c<3;c++)sum[c]+=input[n+c]*k}if(weight)for(let c=0;c<3;c++)out[at+c]=Math.max(0,Math.min(255,Math.floor(input[at+c]+strength/100*(input[at+c]-sum[c]/weight)+.5)))}return out}
+export function sharpenPixels(input: Uint8ClampedArray, w: number, h: number, strength: number) {
+  const out = new Uint8ClampedArray(input);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const at = (y * w + x) * 4;
+      let weight = 0;
+      const sum = [0, 0, 0];
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) {
+          const n =
+              (Math.max(0, Math.min(h - 1, y + dy)) * w + Math.max(0, Math.min(w - 1, x + dx))) * 4,
+            k = ((dx === 0 ? 2 : 1) * (dy === 0 ? 2 : 1) * input[n + 3]) / 255;
+          weight += k;
+          for (let c = 0; c < 3; c++) sum[c] += input[n + c] * k;
+        }
+      if (weight)
+        for (let c = 0; c < 3; c++)
+          out[at + c] = Math.max(
+            0,
+            Math.min(
+              255,
+              Math.floor(
+                input[at + c] + (strength / 100) * (input[at + c] - sum[c] / weight) + 0.5,
+              ),
+            ),
+          );
+    }
+  return out;
+}
 export class Sharpener {
- canvas=document.createElement('canvas');gl:WebGLRenderingContext|null;program?:WebGLProgram;texture?:WebGLTexture;last=0;lastStrength=-1;lastKey='';cpu=document.createElement('canvas');
- constructor(){const gl=this.gl=this.canvas.getContext('webgl',{premultipliedAlpha:false,preserveDrawingBuffer:true});if(!gl)return;try{const shader=(kind:number,source:string)=>{const s=gl.createShader(kind)!;gl.shaderSource(s,source);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(s)||'Shader');return s};const program=gl.createProgram()!;gl.attachShader(program,shader(gl.VERTEX_SHADER,'attribute vec2 p;varying vec2 uv;void main(){uv=(p+1.0)*0.5;gl_Position=vec4(p,0,1);}'));gl.attachShader(program,shader(gl.FRAGMENT_SHADER,`precision highp float;uniform sampler2D image;uniform vec2 pixel;uniform float amount;varying vec2 uv;void main(){vec4 center=texture2D(image,uv);vec3 total=vec3(0);float weight=0.0;for(int y=-1;y<=1;y++){for(int x=-1;x<=1;x++){vec4 c=texture2D(image,uv+vec2(float(x),float(y))*pixel);float k=(x==0?2.0:1.0)*(y==0?2.0:1.0)*c.a;total+=c.rgb*k;weight+=k;}}vec3 blur=weight>0.0?total/weight:center.rgb;gl_FragColor=vec4(clamp(center.rgb+amount*(center.rgb-blur),0.0,1.0),center.a);}`));gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw Error('Shader link');this.program=program;gl.useProgram(program);const buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);const pos=gl.getAttribLocation(program,'p');gl.enableVertexAttribArray(pos);gl.vertexAttribPointer(pos,2,gl.FLOAT,false,0,0);this.texture=gl.createTexture()!;gl.bindTexture(gl.TEXTURE_2D,this.texture);for(const axis of [gl.TEXTURE_WRAP_S,gl.TEXTURE_WRAP_T])gl.texParameteri(gl.TEXTURE_2D,axis,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,1)}catch{this.gl=null}}
- apply(source:HTMLCanvasElement,strength:number,key:string,playing:boolean){if(!strength)return source;const w=source.width,h=source.height,gl=this.gl;if(gl&&!gl.isContextLost()&&this.program){this.canvas.width=w;this.canvas.height=h;gl.viewport(0,0,w,h);gl.useProgram(this.program);gl.bindTexture(gl.TEXTURE_2D,this.texture!);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,source);gl.uniform2f(gl.getUniformLocation(this.program,'pixel'),1/w,1/h);gl.uniform1f(gl.getUniformLocation(this.program,'amount'),strength/100);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);return this.canvas}
- // CPU fallback is throttled only during playback; paused edits remain exact.
- if(playing&&key===this.lastKey&&strength===this.lastStrength&&this.cpu.width===w&&this.cpu.height===h&&performance.now()-this.last<100)return this.cpu;
- this.cpu.width=w;this.cpu.height=h;const ctx=this.cpu.getContext('2d')!;ctx.drawImage(source,0,0);const data=ctx.getImageData(0,0,w,h);ctx.putImageData(new ImageData(sharpenPixels(data.data,w,h,strength),w,h),0,0);this.last=performance.now();this.lastKey=key;this.lastStrength=strength;return this.cpu;
- }
- dispose(){this.gl?.getExtension('WEBGL_lose_context')?.loseContext()}
+  canvas = document.createElement('canvas');
+  gl: WebGLRenderingContext | null;
+  program?: WebGLProgram;
+  texture?: WebGLTexture;
+  last = 0;
+  lastStrength = -1;
+  lastKey = '';
+  cpu = document.createElement('canvas');
+  constructor() {
+    const gl = (this.gl = this.canvas.getContext('webgl', {
+      premultipliedAlpha: false,
+      preserveDrawingBuffer: true,
+    }));
+    if (!gl) return;
+    try {
+      const shader = (kind: number, source: string) => {
+        const s = gl.createShader(kind)!;
+        gl.shaderSource(s, source);
+        gl.compileShader(s);
+        if (!gl.getShaderParameter(s, gl.COMPILE_STATUS))
+          throw Error(gl.getShaderInfoLog(s) || 'Shader');
+        return s;
+      };
+      const program = gl.createProgram()!;
+      gl.attachShader(
+        program,
+        shader(
+          gl.VERTEX_SHADER,
+          'attribute vec2 p;varying vec2 uv;void main(){uv=(p+1.0)*0.5;gl_Position=vec4(p,0,1);}',
+        ),
+      );
+      gl.attachShader(
+        program,
+        shader(
+          gl.FRAGMENT_SHADER,
+          `precision highp float;uniform sampler2D image;uniform vec2 pixel;uniform float amount;varying vec2 uv;void main(){vec4 center=texture2D(image,uv);vec3 total=vec3(0);float weight=0.0;for(int y=-1;y<=1;y++){for(int x=-1;x<=1;x++){vec4 c=texture2D(image,uv+vec2(float(x),float(y))*pixel);float k=(x==0?2.0:1.0)*(y==0?2.0:1.0)*c.a;total+=c.rgb*k;weight+=k;}}vec3 blur=weight>0.0?total/weight:center.rgb;gl_FragColor=vec4(clamp(center.rgb+amount*(center.rgb-blur),0.0,1.0),center.a);}`,
+        ),
+      );
+      gl.linkProgram(program);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw Error('Shader link');
+      this.program = program;
+      gl.useProgram(program);
+      const buffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+      gl.bufferData(
+        gl.ARRAY_BUFFER,
+        new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+        gl.STATIC_DRAW,
+      );
+      const pos = gl.getAttribLocation(program, 'p');
+      gl.enableVertexAttribArray(pos);
+      gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0);
+      this.texture = gl.createTexture()!;
+      gl.bindTexture(gl.TEXTURE_2D, this.texture);
+      for (const axis of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T])
+        gl.texParameteri(gl.TEXTURE_2D, axis, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+    } catch {
+      this.gl = null;
+    }
+  }
+  apply(source: HTMLCanvasElement, strength: number, key: string, playing: boolean) {
+    if (!strength) return source;
+    const w = source.width,
+      h = source.height,
+      gl = this.gl;
+    if (gl && !gl.isContextLost() && this.program) {
+      this.canvas.width = w;
+      this.canvas.height = h;
+      gl.viewport(0, 0, w, h);
+      gl.useProgram(this.program);
+      gl.bindTexture(gl.TEXTURE_2D, this.texture!);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+      gl.uniform2f(gl.getUniformLocation(this.program, 'pixel'), 1 / w, 1 / h);
+      gl.uniform1f(gl.getUniformLocation(this.program, 'amount'), strength / 100);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      return this.canvas;
+    }
+    // CPU fallback is throttled only during playback; paused edits remain exact.
+    if (
+      playing &&
+      key === this.lastKey &&
+      strength === this.lastStrength &&
+      this.cpu.width === w &&
+      this.cpu.height === h &&
+      performance.now() - this.last < 100
+    )
+      return this.cpu;
+    this.cpu.width = w;
+    this.cpu.height = h;
+    const ctx = this.cpu.getContext('2d')!;
+    ctx.drawImage(source, 0, 0);
+    const data = ctx.getImageData(0, 0, w, h);
+    ctx.putImageData(new ImageData(sharpenPixels(data.data, w, h, strength), w, h), 0, 0);
+    this.last = performance.now();
+    this.lastKey = key;
+    this.lastStrength = strength;
+    return this.cpu;
+  }
+  dispose() {
+    this.gl?.getExtension('WEBGL_lose_context')?.loseContext();
+  }
 }

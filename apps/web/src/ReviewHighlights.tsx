@@ -1,71 +1,1025 @@
-import {useEffect,useRef,useState} from 'react';
-import {Link} from 'react-router-dom';
-import {ArrowLeft,ArrowRight,ExternalLink,FileText,Settings2,Play,Save,Plus,Copy,Pencil,Trash2,Loader2,RefreshCw,CheckCircle2,AlertCircle} from 'lucide-react';
-import {api,stamp,type Project,type Clip,type Job} from './api';
-import {formats,type Ratio} from './editorModel';
-import {Button} from './components/ui/button';
-import {Dialog,TagSelect,useConfirm,ActionMenu,ActionItem} from './components/Ui';
-import {SelectionToggle,SelectCheckbox,useBulkSelection,BulkBar} from './components/BulkSelection';
-import {isPending,jobLabel,kindLabel,WaitingDetails} from './components/QueueStatus';
-import type {VideoAsset} from './editorModel';
-import type {Instansi} from './components/SourceOwnership';
-import {sourceRanges,rangeLabel,exclusionPrompt} from './sourceRanges';
+import { durationLabel, mixCapacity } from './timeRange';
+import { HighlightRequestCards } from './HighlightRequestCards';
+import { ProposalDetail } from './ProposalDetail';
+import { ProposalSearch, RouterRecoveryList } from './ProposalSearch';
+import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import {
+  ArrowRight,
+  ExternalLink,
+  FileText,
+  Settings2,
+  Play,
+  Save,
+  Plus,
+  Copy,
+  Pencil,
+  Trash2,
+  Loader2,
+  RefreshCw,
+  CheckCircle2,
+  AlertCircle,
+} from 'lucide-react';
+import { api, stamp, type Project, type Clip, type Job } from './api';
+import { formats, type Ratio } from './editorModel';
+import { Button } from './components/ui/button';
+import { Dialog, TagSelect, useConfirm, ActionMenu, ActionItem } from './components/Ui';
+import {
+  SelectionToggle,
+  SelectCheckbox,
+  useBulkSelection,
+  BulkBar,
+} from './components/BulkSelection';
+import { isPending, jobLabel, kindLabel, WaitingDetails } from './components/QueueStatus';
+import type { VideoAsset } from './editorModel';
+import type { Instansi } from './components/SourceOwnership';
+import { sourceRanges, rangeLabel, exclusionPrompt } from './sourceRanges';
 import './review.css';
-type Settings={aspect_ratio:Ratio;visual_mode:'podcast'|'mix';subtitle_mode:'sentence'|'word';subtitle_animation:'none'|'soft_zoom';instansi_ids:string[];include_global:boolean;mix_hashtags:string[]};
-type Proposal={id:string;project_id:string;revision:number;title:string;summary:string;reason:string;start:number;end:number;original_start:number;original_end:number;fulfills_prompt:boolean;configured:boolean;settings:Partial<Settings>;instansi_ids:string[];status:string;job_id:string|null;clip_id:string|null};
-const defaults:Settings={aspect_ratio:'9:16',visual_mode:'podcast',subtitle_mode:'sentence',subtitle_animation:'none',instansi_ids:[],include_global:true,mix_hashtags:[]};
-const pending=(p:Proposal)=>['queued','running','cancelling','waiting_quota','waiting_service'].includes(p.status);
-const tc=(f:number)=>{const ms=Math.round(f/30*1000);return [Math.floor(ms/3600000),Math.floor(ms/60000)%60,Math.floor(ms/1000)%60].map(n=>String(n).padStart(2,'0')).join(':')+'.'+String(ms%1000).padStart(3,'0')};
-const parse=(s:string)=>{const parts=s.trim().split(':').map(Number);return parts.length<=3&&parts.every(Number.isFinite)?Math.round(parts.reduce((a,v)=>a*60+v,0)*30):NaN};
-const yt=(url:string,frame:number)=>{const u=new URL(url);if(u.hostname==='youtu.be')return 'https://www.youtube.com/watch?v='+u.pathname.slice(1)+'&t='+Math.floor(frame/30)+'s';u.searchParams.delete('start');u.searchParams.set('t',Math.floor(frame/30)+'s');return u.toString()};
-function Transcript({projectId,start,end}:{projectId:string;start:number;end:number}){
- const [rows,setRows]=useState<{start:number;end:number;text:string}[]>([]),[offset,setOffset]=useState(0),[total,setTotal]=useState(0),[error,setError]=useState(''),[loading,setLoading]=useState(false),generation=useRef(0);
- useEffect(()=>setOffset(0),[start,end]);
- useEffect(()=>{const g=++generation.current;setLoading(true);setError('');const t=setTimeout(()=>{void api<{groups:typeof rows;total:number}>('/projects/'+projectId+'/transcript-range?start='+start+'&end='+end+'&offset='+offset+'&limit=30').then(r=>{if(g===generation.current){setRows(r.groups);setTotal(r.total)}}).catch(e=>{if(g===generation.current)setError(e.message)}).finally(()=>{if(g===generation.current)setLoading(false)})},250);return()=>{clearTimeout(t);generation.current++}},[projectId,start,end,offset]);
- return <section className="review-transcript" aria-label="Transkrip bagian sumber">{loading?<p role="status">Memuat transkrip…</p>:error?<p role="alert">{error}</p>:<>{rows.map((r,i)=><p key={i}><time>{stamp(r.start)}</time><span>{r.text}</span></p>)}{!rows.length&&<p>Belum ada ucapan pada rentang ini.</p>}<div className="review-pages"><Button variant="secondary" disabled={!offset} onClick={()=>setOffset(Math.max(0,offset-30))}>Sebelumnya</Button><span>{total?offset+1:0}–{Math.min(offset+30,total)} / {total} kelompok</span><Button variant="secondary" disabled={offset+30>=total} onClick={()=>setOffset(offset+30)}>Berikutnya</Button></div></>}</section>
+type Settings = {
+  aspect_ratio: Ratio;
+  visual_mode: 'podcast' | 'mix';
+  subtitle_mode: 'sentence' | 'word';
+  subtitle_animation: 'none' | 'soft_zoom';
+  instansi_ids: string[];
+  include_global: boolean;
+  mix_hashtags: string[];
+  mix_max_per_minute: number | null;
+};
+export type Proposal = {
+  id: string;
+  project_id: string;
+  revision: number;
+  title: string;
+  summary: string;
+  reason: string;
+  start: number;
+  end: number;
+  original_start: number;
+  original_end: number;
+  fulfills_prompt: boolean;
+  configured: boolean;
+  settings: Partial<Settings>;
+  instansi_ids: string[];
+  status: string;
+  job_id: string | null;
+  clip_id: string | null;
+};
+const defaults: Settings = {
+  aspect_ratio: '9:16',
+  visual_mode: 'podcast',
+  subtitle_mode: 'sentence',
+  subtitle_animation: 'none',
+  instansi_ids: [],
+  include_global: true,
+  mix_hashtags: [],
+  mix_max_per_minute: null,
+};
+const pending = (p: Proposal) =>
+  [
+    'queued',
+    'running',
+    'cancelling',
+    'waiting_quota',
+    'waiting_service',
+    'waiting_network',
+  ].includes(p.status);
+const tc = (f: number) => {
+  const ms = Math.round((f / 30) * 1000);
+  return (
+    [Math.floor(ms / 3600000), Math.floor(ms / 60000) % 60, Math.floor(ms / 1000) % 60]
+      .map((n) => String(n).padStart(2, '0'))
+      .join(':') +
+    '.' +
+    String(ms % 1000).padStart(3, '0')
+  );
+};
+const parse = (s: string) => {
+  const parts = s.trim().split(':').map(Number);
+  return parts.length <= 3 && parts.every(Number.isFinite)
+    ? Math.round(parts.reduce((a, v) => a * 60 + v, 0) * 30)
+    : NaN;
+};
+const yt = (url: string, frame: number) => {
+  const u = new URL(url);
+  if (u.hostname === 'youtu.be')
+    return (
+      'https://www.youtube.com/watch?v=' +
+      u.pathname.slice(1) +
+      '&t=' +
+      Math.floor(frame / 30) +
+      's'
+    );
+  u.searchParams.delete('start');
+  u.searchParams.set('t', Math.floor(frame / 30) + 's');
+  return u.toString();
+};
+export function Transcript({
+  projectId,
+  start,
+  end,
+}: {
+  projectId: string;
+  start: number;
+  end: number;
+}) {
+  const [rows, setRows] = useState<{ start: number; end: number; text: string }[]>([]),
+    [offset, setOffset] = useState(0),
+    [total, setTotal] = useState(0),
+    [error, setError] = useState(''),
+    [loading, setLoading] = useState(false),
+    generation = useRef(0);
+  useEffect(() => setOffset(0), [start, end]);
+  useEffect(() => {
+    const g = ++generation.current;
+    setLoading(true);
+    setError('');
+    const t = setTimeout(() => {
+      void api<{ groups: typeof rows; total: number }>(
+        '/projects/' +
+          projectId +
+          '/transcript-range?start=' +
+          start +
+          '&end=' +
+          end +
+          '&offset=' +
+          offset +
+          '&limit=30',
+      )
+        .then((r) => {
+          if (g === generation.current) {
+            setRows(r.groups);
+            setTotal(r.total);
+          }
+        })
+        .catch((e) => {
+          if (g === generation.current) setError(e.message);
+        })
+        .finally(() => {
+          if (g === generation.current) setLoading(false);
+        });
+    }, 250);
+    return () => {
+      clearTimeout(t);
+      generation.current++;
+    };
+  }, [projectId, start, end, offset]);
+  return (
+    <section className="review-transcript" aria-label="Transkrip bagian sumber">
+      {loading ? (
+        <p role="status">Memuat transkrip…</p>
+      ) : error ? (
+        <p role="alert">{error}</p>
+      ) : (
+        <>
+          {rows.map((r, i) => (
+            <p key={i}>
+              <time>{stamp(r.start)}</time>
+              <span>{r.text}</span>
+            </p>
+          ))}
+          {!rows.length && <p>Belum ada ucapan pada rentang ini.</p>}
+          <div className="review-pages">
+            <Button
+              variant="secondary"
+              disabled={!offset}
+              onClick={() => setOffset(Math.max(0, offset - 30))}
+            >
+              Sebelumnya
+            </Button>
+            <span>
+              {total ? offset + 1 : 0}–{Math.min(offset + 30, total)} / {total} kelompok
+            </span>
+            <Button
+              variant="secondary"
+              disabled={offset + 30 >= total}
+              onClick={() => setOffset(offset + 30)}
+            >
+              Berikutnya
+            </Button>
+          </div>
+        </>
+      )}
+    </section>
+  );
 }
-export function ReviewHighlights({project,clips,jobs,refresh}:{project:Project;clips:Clip[];jobs:Job[];refresh:()=>Promise<void>}){
- const confirm=useConfirm(),[rows,setRows]=useState<Proposal[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[busy,setBusy]=useState(false),[mode,setMode]=useState<'revise'|'setup'|'create'|'batch'|null>(null),[target,setTarget]=useState<Proposal|null>(null),[title,setTitle]=useState(''),[summary,setSummary]=useState(''),[start,setStart]=useState(''),[end,setEnd]=useState(''),[settings,setSettings]=useState<Settings>(defaults),[assets,setAssets]=useState<VideoAsset[]>([]),[owners,setOwners]=useState<Instansi[]>([]),[showTranscript,setShowTranscript]=useState<string|null>(null),[initial,setInitial]=useState(''),[dialogError,setDialogError]=useState('');
- const readySelection=useBulkSelection(clips.map(c=>c.id));const [renaming,setRenaming]=useState<Clip|null>(null),[renameText,setRenameText]=useState(''),[ranges,setRanges]=useState<Clip|null>(null);
- const selection=useBulkSelection(rows.filter(p=>p.status!=='ready').map(p=>p.id));
- async function reload(){const r=await api<Proposal[]>('/projects/'+project.id+'/proposals');setRows(r);await refresh()}
- useEffect(()=>{let live=true;const run=()=>api<Proposal[]>('/projects/'+project.id+'/proposals').then(r=>{if(live)setRows(r)}).catch(e=>{if(live)setError(e.message)}).finally(()=>{if(live)setLoading(false)});void run();const t=setInterval(run,2500);return()=>{live=false;clearInterval(t)}},[project.id]);
- useEffect(()=>{if(mode!=='setup')return;void Promise.all([api<VideoAsset[]>('/video-clips'),api<Instansi[]>('/instansi')]).then(([a,i])=>{setAssets(a);setOwners(i)}).catch(e=>setDialogError(e.message))},[mode]);
- const formKey=()=>JSON.stringify({title,summary,start,end,settings}),a=parse(start),b=parse(end),valid=Number.isFinite(a+b)&&a>=0&&b-a>=30&&b<=Math.floor(project.duration*30);
- async function close(){if(busy)return;if(mode!=='batch'&&formKey()!==initial&&!await confirm({title:'Buang perubahan belum tersimpan?',description:'Revisi yang belum disimpan akan dibuang.',confirmLabel:'Buang perubahan'}))return;setMode(null);setDialogError('')}
- function open(kind:'revise'|'setup'|'create',p?:Proposal){const st={...defaults,...p?.settings,instansi_ids:p?.instansi_ids||[]};const x=p?.start||0,y=p?.end||Math.min(900,Math.floor(project.duration*30));setTarget(p||null);setTitle(p?.title||'Highlight baru');setSummary(p?.summary||'');setStart(tc(x));setEnd(tc(y));setSettings(st);setInitial(JSON.stringify({title:p?.title||'Highlight baru',summary:p?.summary||'',start:tc(x),end:tc(y),settings:st}));setDialogError('');setMode(kind)}
- async function act(fn:()=>Promise<void>){if(busy)return;setBusy(true);setError('');setDialogError('');try{await fn();await reload()}catch(e){setError((e as Error).message);setDialogError((e as Error).message)}finally{setBusy(false)}}
- async function save(process=false){if(!valid)throw Error('Isi rentang sumber yang valid, minimal satu detik.');let p:Proposal;
- const body={title:title.trim(),summary,start:a,end:b};
- if(mode==='create')p=await api('/projects/'+project.id+'/proposals','POST',body);
- else {if(!target)return;if(target.configured&&formKey()===initial)p=target;else p=await api('/proposals/'+target.id,'PATCH',{...body,revision:target.revision,...(mode==='setup'?{settings}: {})})}
- if(process)await api('/projects/'+project.id+'/proposals/process','POST',{items:[{id:p.id,revision:p.revision}]});
- setMode(null)}
- const allowed=assets.filter(v=>v.status==='ready'&&!v.archived&&((v.scope==='global'&&(!settings.instansi_ids.length||settings.include_global))||(v.scope==='instansi'&&v.instansi_ids.some(id=>settings.instansi_ids.includes(id)))));
- const tags=[...new Set(allowed.flatMap(x=>x.hashtags))],options=[...new Set([...tags,...settings.mix_hashtags])].sort().map(t=>({id:t,label:t+(tags.includes(t)?'':' — tidak tersedia untuk sumber ini')}));
- const selected=rows.filter(p=>selection.selected.has(p.id)),canBatch=selected.length>0&&selected.every(p=>p.configured&&!pending(p)&&p.status!=='ready');
- const overlaps=valid&&(rows.some(p=>p.id!==target?.id&&p.start<b&&a<p.end)||clips.some(c=>c.id!==target?.clip_id&&c.plan.segments.some(s=>s.source_in<b&&a<s.source_in+s.duration)));
- const sourceSummary=!settings.instansi_ids.length?'Global saja':settings.instansi_ids.map(id=>owners.find(x=>x.id===id)?.name||id).join(', ')+(settings.include_global?' + Global':'');
- const analysis=jobs.find(j=>j.kind==='analysis'),active=jobs.some(isPending);
- const status=(p:Proposal)=>pending(p)?jobLabel(jobs.find(j=>j.id===p.job_id)||{status:p.status,stage:'Menunggu giliran'} as Job):p.status==='ready'?'Siap diedit':p.status==='failed'?'Gagal — dapat direvisi':p.status==='cancelled'?'Dibatalkan':'Menunggu persetujuan';
- return <main className="mg-page review-page"><Link className="mg-back" to="/projects"><ArrowLeft size={16}/>Semua proyek</Link><header className="mg-page-header"><div><h1>{project.title}</h1><p>{rows.filter(p=>!pending(p)&&p.status!=='ready').length} menunggu persetujuan · {rows.filter(p=>pending(p)).length} diproses · {clips.length} siap diedit</p></div><div className="page-header-actions"><SelectionToggle active={selection.selecting} onToggle={selection.toggleMode}/><Button disabled={!project.duration||busy} onClick={()=>open('create')}><Plus size={16}/>Highlight</Button></div></header>
- {error&&<p className="notice" role="alert"><AlertCircle size={17}/>{error}</p>}
- {project.analysis_report.unmet_requests?.map((t,i)=><p className="notice" key={i}>{t}</p>)}
- {jobs.filter(isPending).map(j=><section className="panel review-job" key={j.id}><div><strong>{kindLabel(j.kind)}</strong><span>{jobLabel(j)}</span><Button variant="secondary" disabled={busy||j.status==='cancelling'} onClick={()=>void act(async()=>{await api('/jobs/'+j.id+'/cancel','POST')})}>Batalkan</Button></div><progress max={100} value={j.progress}/><WaitingDetails job={j} disabled={busy} onCheck={()=>void act(async()=>{await api('/jobs/'+j.id+'/check','POST')})}/></section>)}
- {!active&&(!analysis||['failed','cancelled'].includes(analysis.status))&&!rows.length&&<Button onClick={()=>void act(async()=>{await api(analysis?'/jobs/'+analysis.id+'/retry':'/projects/'+project.id+'/analysis','POST')})}><RefreshCw size={16}/>Coba analisis lagi</Button>}
- {selection.selecting&&<div className="bulk-bar"><label><SelectCheckbox label="Pilih semua usulan" checked={rows.filter(p=>!pending(p)&&p.status!=='ready').every(p=>selection.selected.has(p.id))} onChange={()=>selection.togglePage(rows.filter(p=>!pending(p)&&p.status!=='ready').map(p=>p.id))}/>Pilih semua usulan</label><span>{selected.length} terpilih</span><Button disabled={!canBatch||busy} onClick={()=>{setDialogError('');setMode('batch')}}><Play size={16}/>Proses terpilih</Button><Button variant="secondary" disabled={!selected.length||selected.some(p=>pending(p))||busy} onClick={()=>void act(async()=>{if(!await confirm({title:'Hapus usulan terpilih?',description:'Video sumber dan highlight siap edit tetap tersedia.',danger:true,confirmLabel:'Hapus'}))return;for(const p of selected)await api('/proposals/'+p.id,'DELETE');selection.clear()})}><Trash2 size={16}/>Hapus</Button>{!canBatch&&selected.length>0&&<small>Siapkan konfigurasi setiap usulan dahulu.</small>}</div>}
- {loading?<p role="status"><Loader2 className="spin" size={18}/>Memuat usulan…</p>:!rows.length&&!clips.length?<div className="mg-empty"><FileText size={28}/><h2>{active?'Analisis sedang berjalan':'Belum ada usulan'}</h2><p>Bagian yang ditemukan akan muncul sebagai usulan untuk kamu tinjau.</p></div>:null}
- <div className="review-list">{rows.filter(p=>p.status!=='ready').map((p,i)=><article className="panel review-card" key={p.id}><header>{selection.selecting&&<SelectCheckbox label={'Pilih '+p.title} checked={selection.selected.has(p.id)} disabled={pending(p)||busy} onChange={()=>selection.toggle(p.id)}/>}<span className="review-number">{String(i+1).padStart(2,'0')}</span><div><h2>{p.title}</h2><span className="review-status">{status(p)}</span></div></header><p>{p.summary||'Ringkasan belum tersedia.'}</p>{p.status==='failed'&&<p className="notice" role="alert">{jobs.find(j=>j.id===p.job_id)?.error||'Penyusunan video gagal. Periksa lalu coba lagi.'}</p>}<details><summary>Alasan dipilih</summary><p>{p.reason}</p>{(p.start!==p.original_start||p.end!==p.original_end)&&<small>Rentang sudah direvisi. Alasan ini menjelaskan usulan awal {tc(p.original_start)}–{tc(p.original_end)}.</small>}</details><div className="review-range"><strong>{tc(p.start)}–{tc(p.end)}</strong><span>{stamp((p.end-p.start)/30)} · sumber YouTube</span>{p.fulfills_prompt&&<span><CheckCircle2 size={14}/>Sesuai prompt</span>}</div>{p.configured&&<p className="field-help">{p.settings.aspect_ratio} · {p.settings.visual_mode==='mix'?'Mix':'Podcast'} · {p.settings.subtitle_mode==='word'?'Kata per kata':'Kalimat'} · {p.settings.subtitle_animation==='soft_zoom'?'Zoom halus':'Tanpa animasi'}</p>}<footer><a className="button secondary" target="_blank" rel="noopener noreferrer" href={yt(project.url,p.start)}><ExternalLink size={15}/>Buka di YouTube</a><Button variant="secondary" onClick={()=>setShowTranscript(showTranscript===p.id?null:p.id)}><FileText size={15}/>Lihat transkrip</Button><Button variant="secondary" disabled={pending(p)||busy} onClick={()=>open('revise',p)}>Revisi bagian</Button><Button disabled={pending(p)||busy} onClick={()=>open('setup',p)}><Settings2 size={15}/>Siapkan video</Button>{['failed','cancelled'].includes(p.status)&&p.job_id&&<Button variant="secondary" disabled={busy} onClick={()=>void act(async()=>{await api('/jobs/'+p.job_id+'/retry','POST')})}><RefreshCw size={15}/>Coba lagi</Button>}{!pending(p)&&<Button variant="secondary" aria-label={'Hapus usulan '+p.title} title="Hapus usulan" onClick={()=>void act(async()=>{if(await confirm({title:'Hapus usulan?',description:p.title,confirmLabel:'Hapus',danger:true}))await api('/proposals/'+p.id,'DELETE')})}><Trash2 size={15}/></Button>}</footer>{showTranscript===p.id&&<Transcript projectId={project.id} start={p.start} end={p.end}/>}</article>)}</div>
- {clips.length>0&&<><div className="review-ready-heading"><h2 className="review-section-title">Siap diedit</h2><SelectionToggle active={readySelection.selecting} onToggle={readySelection.toggleMode}/></div>{readySelection.selecting&&<BulkBar selected={readySelection.selected} visibleIds={clips.map(c=>c.id)} onTogglePage={()=>readySelection.togglePage(clips.map(c=>c.id))} onClear={readySelection.clear} disabled={busy||active} onDelete={()=>void act(async()=>{if(!await confirm({title:'Hapus highlight terpilih?',description:'Highlight dan hasil ekspor terpilih dihapus permanen.',danger:true,confirmLabel:'Hapus'}))return;for(const id of readySelection.selected)await api('/clips/'+id,'DELETE');readySelection.clear()})}/>}<div className="mg-highlight-grid">{clips.map(c=><article className="panel review-card" key={c.id}>{readySelection.selecting&&<SelectCheckbox label={'Pilih highlight '+c.title} checked={readySelection.selected.has(c.id)} disabled={busy||active} onChange={()=>readySelection.toggle(c.id)}/>}<h2>{c.title}</h2><p>{c.reason}</p><div className="review-range"><span>{c.aspect_ratio}</span><span>Diambil dari YouTube: {sourceRanges(c.plan).slice(0,2).map(rangeLabel).join(' · ')}</span></div>{sourceRanges(c.plan).length>2&&<Button variant="secondary" onClick={()=>setRanges(c)}>Lihat semua rentang</Button>}<footer><Link className="button primary" to={'/projects/'+project.id+'/clips/'+c.id}>Buka studio<ArrowRight size={16}/></Link><ActionMenu label={'Aksi '+c.title}><ActionItem onClick={()=>{setRenaming(c);setRenameText(c.title)}}><Pencil size={15}/>Ubah nama</ActionItem><ActionItem onClick={()=>void navigator.clipboard.writeText(exclusionPrompt(c.plan)).catch(()=>setRanges(c))}><Copy size={15}/>Salin batasan waktu</ActionItem><ActionItem disabled={busy||active} onClick={()=>void act(async()=>{await api('/projects/'+project.id+'/clips','POST',{title:(c.title+' — salinan').slice(0,200),plan:c.plan,aspect_ratio:c.aspect_ratio,processing_config:c.processing_config,instansi_ids:c.instansi_ids})})}><Copy size={15}/>Duplikat</ActionItem><ActionItem danger disabled={busy||active} onClick={()=>void act(async()=>{if(await confirm({title:'Hapus highlight?',description:'Highlight dan hasil ekspornya dihapus permanen.',confirmLabel:'Hapus',danger:true}))await api('/clips/'+c.id,'DELETE')})}><Trash2 size={15}/>Hapus highlight</ActionItem></ActionMenu></footer></article>)}</div></>}
- <Dialog open={!!renaming} onClose={()=>setRenaming(null)} title="Ubah nama highlight" footer={<Button disabled={busy||!renameText.trim()} onClick={()=>void act(async()=>{if(renaming){await api('/clips/'+renaming.id,'PATCH',{title:renameText.trim(),plan:renaming.plan,revision:renaming.revision});setRenaming(null)}})}>Simpan nama</Button>}><label>Nama highlight<input value={renameText} onChange={e=>setRenameText(e.target.value)} maxLength={200}/></label>{dialogError&&<p role="alert">{dialogError}</p>}</Dialog>
- <Dialog open={!!ranges} onClose={()=>setRanges(null)} title="Rentang sumber YouTube">{ranges&&<div className="mg-dialog-form review-dialog-content"><ul>{sourceRanges(ranges.plan).map((r,i)=><li key={i}>{rangeLabel(r)}</li>)}</ul><label>Batasan untuk prompt<textarea readOnly value={exclusionPrompt(ranges.plan)} onFocus={e=>e.target.select()}/></label></div>}</Dialog>
- <Dialog open={mode!==null} onClose={()=>void close()} title={mode==='batch'?'Proses highlight terpilih':mode==='setup'?'Siapkan video':mode==='create'?'Tambah usulan manual':'Revisi bagian'} description={mode==='setup'?'Atur tampilan untuk highlight ini. Rasio terkunci setelah proses diterima.':mode==='batch'?'Setiap highlight masuk sebagai satu pekerjaan. Hanya satu pekerjaan berat berjalan pada satu waktu.':'Waktu mengikuti sumber YouTube. Format HH:MM:SS atau detik; ketelitian 30 fps.'} footer={<><Button variant="secondary" disabled={busy} onClick={()=>void close()}>Batal</Button>{mode==='setup'&&<Button variant="secondary" disabled={busy} onClick={()=>void act(()=>save(false))}><Save size={15}/>Simpan pengaturan</Button>}<Button disabled={busy||(mode==='batch'?!canBatch:!valid||!title.trim())} onClick={()=>void act(async()=>{if(mode==='batch'){await api('/projects/'+project.id+'/proposals/process','POST',{items:selected.map(p=>({id:p.id,revision:p.revision}))});selection.clear();setMode(null)}else await save(mode==='setup')})}>{busy?<Loader2 size={15} className="spin"/>:mode==='setup'||mode==='batch'?<Play size={15}/>:<Save size={15}/>} {mode==='setup'||mode==='batch'?'Proses video':'Simpan revisi'}</Button></>}>
- {dialogError&&<p className="notice" role="alert">{dialogError} Tutup dan buka ulang usulan untuk memuat revisi terbaru jika terjadi konflik.</p>}
- {mode==='batch'?<ul>{selected.map(p=><li key={p.id}>{p.title} · {tc(p.start)}–{tc(p.end)} · {p.settings.aspect_ratio} · {p.settings.visual_mode}</li>)}</ul>:<div className="mg-dialog-form review-dialog-content">
- {mode!=='setup'?<><label>Judul<input maxLength={200} value={title} onChange={e=>setTitle(e.target.value)}/></label><label>Ringkasan<textarea aria-label="Ringkasan" rows={3} maxLength={2000} value={summary} onChange={e=>setSummary(e.target.value)}/></label><div className="mg-range-fields"><label>Mulai<input value={start} onChange={e=>setStart(e.target.value)}/></label><label>Selesai<input value={end} onChange={e=>setEnd(e.target.value)}/></label></div><p className="field-help">Hasil normalisasi: {valid?tc(a)+'–'+tc(b)+' · '+stamp((b-a)/30):'Rentang belum valid'}.</p>{valid&&b-a>2700&&<p className="field-help">Bagian lebih dari 90 detik diperbolehkan. Pemrosesan dapat membutuhkan waktu lebih lama.</p>}{overlaps&&<p className="field-help">Rentang beririsan dengan pilihan lain. Kamu tetap dapat menyimpannya.</p>}{valid&&<><a href={yt(project.url,a)} target="_blank" rel="noopener noreferrer">Periksa di YouTube <ExternalLink size={14}/></a><Transcript projectId={project.id} start={a} end={b}/></>}</>:<><div className="review-range"><strong>{title}</strong><span>{tc(a)}–{tc(b)} · {stamp((b-a)/30)}</span></div><label>Tampilan video<select aria-label="Tampilan video" value={settings.visual_mode} onChange={e=>setSettings({...settings,visual_mode:e.target.value as Settings['visual_mode']})}><option value="podcast">Podcast saja</option><option value="mix">Mix</option></select></label>{settings.visual_mode==='mix'&&<><TagSelect prefix="" noun="instansi" max={100} label="Instansi sumber · opsional" options={owners.map(i=>({id:i.id,label:i.name}))} value={settings.instansi_ids} onChange={ids=>setSettings({...settings,instansi_ids:ids,include_global:!settings.instansi_ids.length||!ids.length?true:settings.include_global})}/>{settings.instansi_ids.length>0&&<label className="source-global-toggle"><input type="checkbox" checked={settings.include_global} onChange={e=>setSettings({...settings,include_global:e.target.checked})}/>Sertakan video Global</label>}<p className="field-help">Sumber: {sourceSummary}</p></>}
- <fieldset className="ratio-options"><legend>Rasio video</legend>{formats.map(f=><button type="button" key={f.id} aria-pressed={settings.aspect_ratio===f.id} className={settings.aspect_ratio===f.id?'active':''} onClick={()=>setSettings({...settings,aspect_ratio:f.id})}><span className="ratio-icon"><i style={{aspectRatio:f.width+'/'+f.height,width:24}}/></span><strong>{f.id}</strong><small>{f.label}</small></button>)}</fieldset>
- <div className="mg-range-fields"><label>Tampilan subtitle<select aria-label="Tampilan subtitle" value={settings.subtitle_mode} onChange={e=>setSettings({...settings,subtitle_mode:e.target.value as Settings['subtitle_mode']})}><option value="sentence">Kalimat</option><option value="word">Kata per kata</option></select></label><label>Animasi subtitle<select aria-label="Animasi subtitle" value={settings.subtitle_animation} onChange={e=>setSettings({...settings,subtitle_animation:e.target.value as Settings['subtitle_animation']})}><option value="none">Tanpa animasi</option><option value="soft_zoom">Zoom halus</option></select></label></div>
- {settings.visual_mode==='mix'&&<><TagSelect label="Batasi topik sisipan — opsional" options={options} value={settings.mix_hashtags} onChange={v=>setSettings({...settings,mix_hashtags:v})}/><p className="field-help">{allowed.filter(v=>settings.mix_hashtags.every(t=>v.hashtags.includes(t))).length} video siap digunakan. Semua hashtag terpilih wajib dimiliki kandidat.</p>{!allowed.some(v=>settings.mix_hashtags.every(t=>v.hashtags.includes(t)))&&<p className="notice">Tidak ada sisipan yang sesuai. Video tetap diproses dengan tampilan podcast.</p>}</>}</>}
- </div>}</Dialog>
- </main>
+export function ReviewHighlights({
+  project,
+  clips,
+  jobs,
+  refresh,
+  view = 'transcription',
+  detailId,
+}: {
+  view?: 'transcription' | 'video';
+  detailId?: string;
+  project: Project;
+  clips: Clip[];
+  jobs: Job[];
+  refresh: () => Promise<void>;
+}) {
+  const confirm = useConfirm(),
+    [rows, setRows] = useState<Proposal[]>([]),
+    [loading, setLoading] = useState(true),
+    [error, setError] = useState(''),
+    [busy, setBusy] = useState(false),
+    [mode, setMode] = useState<'setup' | 'batch' | null>(null),
+    [target, setTarget] = useState<Proposal | null>(null),
+    [title, setTitle] = useState(''),
+    [summary, setSummary] = useState(''),
+    [start, setStart] = useState(''),
+    [end, setEnd] = useState(''),
+    [settings, setSettings] = useState<Settings>(defaults),
+    [assets, setAssets] = useState<VideoAsset[]>([]),
+    [owners, setOwners] = useState<Instansi[]>([]),
+    [initial, setInitial] = useState(''),
+    [dialogError, setDialogError] = useState('');
+  const readySelection = useBulkSelection(clips.map((c) => c.id));
+  const [renaming, setRenaming] = useState<Clip | null>(null),
+    [renameText, setRenameText] = useState(''),
+    [ranges, setRanges] = useState<Clip | null>(null);
+  const selection = useBulkSelection(rows.filter((p) => p.status !== 'ready').map((p) => p.id));
+  async function reload() {
+    const r = await api<Proposal[]>('/projects/' + project.id + '/proposals');
+    setRows(r);
+    await refresh();
+  }
+  useEffect(() => {
+    let live = true;
+    const run = () =>
+      api<Proposal[]>('/projects/' + project.id + '/proposals')
+        .then((r) => {
+          if (live) setRows(r);
+        })
+        .catch((e) => {
+          if (live) setError(e.message);
+        })
+        .finally(() => {
+          if (live) setLoading(false);
+        });
+    void run();
+    const t = setInterval(run, 2500);
+    return () => {
+      live = false;
+      clearInterval(t);
+    };
+  }, [project.id]);
+  useEffect(() => {
+    if (mode !== 'setup') return;
+    void Promise.all([api<VideoAsset[]>('/video-clips'), api<Instansi[]>('/instansi')])
+      .then(([a, i]) => {
+        setAssets(a);
+        setOwners(i);
+      })
+      .catch((e) => setDialogError(e.message));
+  }, [mode]);
+  const formKey = () => JSON.stringify({ title, summary, start, end, settings }),
+    a = parse(start),
+    b = parse(end),
+    valid =
+      Number.isFinite(a + b) &&
+      a >= 0 &&
+      b - a >= 300 &&
+      b - a <= 36000 &&
+      b <= Math.floor(project.duration * 30);
+  async function close() {
+    if (busy) return;
+    if (
+      mode !== 'batch' &&
+      formKey() !== initial &&
+      !(await confirm({
+        title: 'Buang perubahan belum tersimpan?',
+        description: 'Revisi yang belum disimpan akan dibuang.',
+        confirmLabel: 'Buang perubahan',
+      }))
+    )
+      return;
+    setMode(null);
+    setDialogError('');
+  }
+  function open(kind: 'setup', p?: Proposal) {
+    const st = { ...defaults, ...p?.settings, instansi_ids: p?.instansi_ids || [] };
+    const x = p?.start || 0,
+      y = p?.end || Math.min(900, Math.floor(project.duration * 30));
+    setTarget(p || null);
+    setTitle(p?.title || 'Highlight baru');
+    setSummary(p?.summary || '');
+    setStart(tc(x));
+    setEnd(tc(y));
+    if (st.mix_max_per_minute !== null)
+      st.mix_max_per_minute = Math.min(st.mix_max_per_minute, mixCapacity(y - x));
+    setSettings(st);
+    setInitial(
+      JSON.stringify({
+        title: p?.title || 'Highlight baru',
+        summary: p?.summary || '',
+        start: tc(x),
+        end: tc(y),
+        settings: st,
+      }),
+    );
+    setDialogError(
+      p?.settings.mix_max_per_minute && p.settings.mix_max_per_minute > mixCapacity(y - x)
+        ? 'Batas sisipan disesuaikan dengan kapasitas durasi highlight.'
+        : '',
+    );
+    setMode(kind);
+  }
+  async function act(fn: () => Promise<void>) {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    setDialogError('');
+    try {
+      await fn();
+      await reload();
+    } catch (e) {
+      setError((e as Error).message);
+      setDialogError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function save(process = false) {
+    if (!valid) throw Error('Isi rentang sumber yang valid, 10 detik sampai 20 menit.');
+    let p: Proposal;
+    const body = { title: title.trim(), summary, start: a, end: b };
+    {
+      if (!target) return;
+      if (target.configured && formKey() === initial) p = target;
+      else
+        p = await api('/proposals/' + target.id, 'PATCH', {
+          ...body,
+          revision: target.revision,
+          ...(mode === 'setup' ? { settings } : {}),
+        });
+    }
+    if (process)
+      await api('/projects/' + project.id + '/proposals/process', 'POST', {
+        items: [{ id: p.id, revision: p.revision }],
+      });
+    setMode(null);
+  }
+  const allowed = assets.filter(
+    (v) =>
+      v.status === 'ready' &&
+      v.frames >= 90 &&
+      (!v.scenes.length || v.scenes.some((scene) => scene.end - scene.start >= 90)) &&
+      !v.archived &&
+      ((v.scope === 'global' && (!settings.instansi_ids.length || settings.include_global)) ||
+        (v.scope === 'instansi' &&
+          v.instansi_ids.some((id) => settings.instansi_ids.includes(id)))),
+  );
+  const tags = [...new Set(allowed.flatMap((x) => x.hashtags))],
+    options = [...new Set([...tags, ...settings.mix_hashtags])].sort().map((t) => ({
+      id: t,
+      label: t + (tags.includes(t) ? '' : ' — tidak tersedia untuk sumber ini'),
+    }));
+  const selected = rows.filter((p) => selection.selected.has(p.id)),
+    canBatch =
+      selected.length > 0 &&
+      selected.every(
+        (p) =>
+          p.configured &&
+          !pending(p) &&
+          p.status !== 'ready' &&
+          p.start >= 0 &&
+          p.end <= Math.floor(project.duration * 30) &&
+          p.end - p.start >= 300 &&
+          p.end - p.start <= 36000,
+      );
+  const sourceSummary = !settings.instansi_ids.length
+    ? 'Global saja'
+    : settings.instansi_ids.map((id) => owners.find((x) => x.id === id)?.name || id).join(', ') +
+      (settings.include_global ? ' + Global' : '');
+  const active = jobs.some(isPending);
+
+  return (
+    <main className="mg-page review-page">
+      {detailId ? (
+        loading ? (
+          <p role="status">Memuat detail highlight…</p>
+        ) : rows.find((p) => p.id === detailId) ? (
+          <ProposalDetail
+            key={detailId}
+            project={project}
+            proposal={rows.find((p) => p.id === detailId)!}
+            rows={rows}
+            clips={clips}
+            refresh={reload}
+            onSetup={() =>
+              open(
+                'setup',
+                rows.find((p) => p.id === detailId)!,
+              )
+            }
+          />
+        ) : (
+          <p role="alert">Usulan tidak ditemukan pada proyek ini.</p>
+        )
+      ) : (
+        <>
+          <header className="mg-page-header review-project-header">
+            <div>
+              <h1>{project.title}</h1>
+              <p>
+                {rows.filter((p) => !pending(p) && p.status !== 'ready').length} menunggu
+                persetujuan · {rows.filter((p) => pending(p)).length} diproses · {clips.length} siap
+                diedit
+              </p>
+            </div>
+            <div className="page-header-actions">
+              <Link
+                className="button secondary"
+                to={(view === 'transcription' ? '/projects/' : '/transcriptions/') + project.id}
+              >
+                {view === 'transcription' ? 'Proyek Video' : 'Proyek Transkripsi'}
+              </Link>
+              <ProposalSearch project={project} onComplete={() => void reload()} />
+              {view === 'transcription' && (
+                <SelectionToggle active={selection.selecting} onToggle={selection.toggleMode} />
+              )}
+            </div>
+          </header>
+          {error && (
+            <p className="notice" role="alert">
+              <AlertCircle size={17} />
+              {error}
+            </p>
+          )}
+          <RouterRecoveryList jobs={jobs} onComplete={reload} />
+          {view === 'transcription' && rows.some((p) => p.status === 'ready') && (
+            <details className="panel">
+              <summary>Riwayat usulan yang sudah menjadi video</summary>
+              {rows
+                .filter((p) => p.status === 'ready')
+                .map((p) => (
+                  <p key={p.id}>
+                    {p.title} · {tc(p.start)}–{tc(p.end)}{' '}
+                    <Link to={'/projects/' + project.id}>Lihat video</Link>
+                  </p>
+                ))}
+            </details>
+          )}
+          {jobs.filter(isPending).map((j) => (
+            <section className="panel review-job" key={j.id}>
+              <div>
+                <strong>{kindLabel(j.kind)}</strong>
+                <span>{jobLabel(j)}</span>
+                <Button
+                  variant="secondary"
+                  disabled={busy || j.status === 'cancelling'}
+                  onClick={() =>
+                    void act(async () => {
+                      await api('/jobs/' + j.id + '/cancel', 'POST');
+                    })
+                  }
+                >
+                  Batalkan
+                </Button>
+              </div>
+              <progress max={100} value={j.progress} />
+              <WaitingDetails
+                job={j}
+                disabled={busy}
+                onCheck={() =>
+                  void act(async () => {
+                    await api('/jobs/' + j.id + '/check', 'POST');
+                  })
+                }
+              />
+            </section>
+          ))}
+          {selection.selecting && (
+            <div className="bulk-bar">
+              <label>
+                <SelectCheckbox
+                  label="Pilih semua usulan"
+                  checked={rows
+                    .filter((p) => !pending(p) && p.status !== 'ready')
+                    .every((p) => selection.selected.has(p.id))}
+                  onChange={() =>
+                    selection.togglePage(
+                      rows.filter((p) => !pending(p) && p.status !== 'ready').map((p) => p.id),
+                    )
+                  }
+                />
+                Pilih semua usulan
+              </label>
+              <span>{selected.length} terpilih</span>
+              <Button
+                disabled={!canBatch || busy}
+                onClick={() => {
+                  setDialogError('');
+                  setMode('batch');
+                }}
+              >
+                <Play size={16} />
+                Proses terpilih
+              </Button>
+              <Button
+                variant="secondary"
+                disabled={!selected.length || selected.some((p) => pending(p)) || busy}
+                onClick={() =>
+                  void act(async () => {
+                    if (
+                      !(await confirm({
+                        title: 'Hapus usulan terpilih?',
+                        description: 'Video sumber dan highlight siap edit tetap tersedia.',
+                        danger: true,
+                        confirmLabel: 'Hapus',
+                      }))
+                    )
+                      return;
+                    for (const p of selected) await api('/proposals/' + p.id, 'DELETE');
+                    selection.clear();
+                  })
+                }
+              >
+                <Trash2 size={16} />
+                Hapus
+              </Button>
+              {!canBatch && selected.length > 0 && (
+                <small>
+                  Siapkan konfigurasi setiap usulan dan pastikan durasinya 10 detik–20 menit.
+                </small>
+              )}
+            </div>
+          )}
+          {loading ? (
+            <p role="status">
+              <Loader2 className="spin" size={18} />
+              Memuat usulan…
+            </p>
+          ) : view === 'video' && !rows.length && !clips.length ? (
+            <div className="mg-empty">
+              <FileText size={28} />
+              <h2>
+                {view === 'video'
+                  ? 'Belum ada video siap diedit'
+                  : active
+                    ? 'Analisis sedang berjalan'
+                    : 'Belum ada usulan'}
+              </h2>
+              <p>
+                {view === 'video'
+                  ? 'Setujui usulan pada bagian Transkripsi untuk menyiapkan video.'
+                  : 'Bagian yang ditemukan akan muncul sebagai usulan untuk kamu tinjau.'}
+              </p>
+            </div>
+          ) : null}
+          <HighlightRequestCards
+            project={project}
+            refresh={reload}
+            selecting={selection.selecting}
+            selected={selection.selected}
+            onSelect={selection.toggle}
+            view={view}
+          />
+          {view === 'video' && clips.length > 0 && (
+            <>
+              <div className="review-ready-heading">
+                <h2 className="review-section-title">Siap diedit</h2>
+                <SelectionToggle
+                  active={readySelection.selecting}
+                  onToggle={readySelection.toggleMode}
+                />
+              </div>
+              {readySelection.selecting && (
+                <BulkBar
+                  selected={readySelection.selected}
+                  visibleIds={clips.map((c) => c.id)}
+                  onTogglePage={() => readySelection.togglePage(clips.map((c) => c.id))}
+                  onClear={readySelection.clear}
+                  disabled={busy || active}
+                  onDelete={() =>
+                    void act(async () => {
+                      if (
+                        !(await confirm({
+                          title: 'Hapus highlight terpilih?',
+                          description: 'Highlight dan hasil ekspor terpilih dihapus permanen.',
+                          danger: true,
+                          confirmLabel: 'Hapus',
+                        }))
+                      )
+                        return;
+                      for (const id of readySelection.selected) await api('/clips/' + id, 'DELETE');
+                      readySelection.clear();
+                    })
+                  }
+                />
+              )}
+              <div className="mg-highlight-grid">
+                {clips.map((c) => (
+                  <article className="panel review-card" key={c.id}>
+                    {readySelection.selecting && (
+                      <SelectCheckbox
+                        label={'Pilih highlight ' + c.title}
+                        checked={readySelection.selected.has(c.id)}
+                        disabled={busy || active}
+                        onChange={() => readySelection.toggle(c.id)}
+                      />
+                    )}
+                    <h2>{c.title}</h2>
+                    <p>{c.reason}</p>
+                    <div className="review-range">
+                      <span>{c.aspect_ratio}</span>
+                      <span>
+                        Diambil dari YouTube:{' '}
+                        {sourceRanges(c.plan).slice(0, 2).map(rangeLabel).join(' · ')}
+                      </span>
+                    </div>
+                    {sourceRanges(c.plan).length > 2 && (
+                      <Button variant="secondary" onClick={() => setRanges(c)}>
+                        Lihat semua rentang
+                      </Button>
+                    )}
+                    <footer>
+                      <Link
+                        className="button primary"
+                        to={'/projects/' + project.id + '/clips/' + c.id}
+                      >
+                        Buka studio
+                        <ArrowRight size={16} />
+                      </Link>
+                      <ActionMenu label={'Aksi ' + c.title}>
+                        <ActionItem
+                          onClick={() => {
+                            setRenaming(c);
+                            setRenameText(c.title);
+                          }}
+                        >
+                          <Pencil size={15} />
+                          Ubah nama
+                        </ActionItem>
+                        <ActionItem
+                          onClick={() =>
+                            void navigator.clipboard
+                              .writeText(exclusionPrompt(c.plan))
+                              .catch(() => setRanges(c))
+                          }
+                        >
+                          <Copy size={15} />
+                          Salin batasan waktu
+                        </ActionItem>
+                        <ActionItem
+                          disabled={busy || active}
+                          onClick={() =>
+                            void act(async () => {
+                              await api('/projects/' + project.id + '/clips', 'POST', {
+                                title: (c.title + ' — salinan').slice(0, 200),
+                                plan: c.plan,
+                                aspect_ratio: c.aspect_ratio,
+                                processing_config: c.processing_config,
+                                instansi_ids: c.instansi_ids,
+                              });
+                            })
+                          }
+                        >
+                          <Copy size={15} />
+                          Duplikat
+                        </ActionItem>
+                        <ActionItem
+                          danger
+                          disabled={busy || active}
+                          onClick={() =>
+                            void act(async () => {
+                              if (
+                                await confirm({
+                                  title: 'Hapus highlight?',
+                                  description: 'Highlight dan hasil ekspornya dihapus permanen.',
+                                  confirmLabel: 'Hapus',
+                                  danger: true,
+                                })
+                              )
+                                await api('/clips/' + c.id, 'DELETE');
+                            })
+                          }
+                        >
+                          <Trash2 size={15} />
+                          Hapus highlight
+                        </ActionItem>
+                      </ActionMenu>
+                    </footer>
+                  </article>
+                ))}
+              </div>
+            </>
+          )}
+        </>
+      )}
+      <Dialog
+        open={!!renaming}
+        onClose={() => setRenaming(null)}
+        title="Ubah nama highlight"
+        footer={
+          <Button
+            disabled={busy || !renameText.trim()}
+            onClick={() =>
+              void act(async () => {
+                if (renaming) {
+                  await api('/clips/' + renaming.id, 'PATCH', {
+                    title: renameText.trim(),
+                    plan: renaming.plan,
+                    revision: renaming.revision,
+                  });
+                  setRenaming(null);
+                }
+              })
+            }
+          >
+            Simpan nama
+          </Button>
+        }
+      >
+        <label>
+          Nama highlight
+          <input
+            value={renameText}
+            onChange={(e) => setRenameText(e.target.value)}
+            maxLength={200}
+          />
+        </label>
+        {dialogError && <p role="alert">{dialogError}</p>}
+      </Dialog>
+      <Dialog open={!!ranges} onClose={() => setRanges(null)} title="Rentang sumber YouTube">
+        {ranges && (
+          <div className="mg-dialog-form review-dialog-content">
+            <ul>
+              {sourceRanges(ranges.plan).map((r, i) => (
+                <li key={i}>{rangeLabel(r)}</li>
+              ))}
+            </ul>
+            <label>
+              Batasan untuk prompt
+              <textarea
+                readOnly
+                value={exclusionPrompt(ranges.plan)}
+                onFocus={(e) => e.target.select()}
+              />
+            </label>
+          </div>
+        )}
+      </Dialog>
+      <Dialog
+        open={mode !== null}
+        onClose={() => void close()}
+        title={mode === 'batch' ? 'Proses highlight terpilih' : 'Siapkan video'}
+        description={
+          mode === 'setup'
+            ? 'Atur tampilan untuk highlight ini. Rasio terkunci setelah proses diterima.'
+            : mode === 'batch'
+              ? 'Setiap highlight masuk sebagai satu pekerjaan. Hanya satu pekerjaan berat berjalan pada satu waktu.'
+              : 'Waktu mengikuti sumber YouTube. Format HH:MM:SS atau detik; ketelitian 30 fps.'
+        }
+        footer={
+          <>
+            <Button variant="secondary" disabled={busy} onClick={() => void close()}>
+              Batal
+            </Button>
+            {mode === 'setup' && (
+              <Button
+                variant="secondary"
+                disabled={busy || !valid}
+                onClick={() => void act(() => save(false))}
+              >
+                <Save size={15} />
+                Simpan pengaturan
+              </Button>
+            )}
+            <Button
+              disabled={busy || (mode === 'batch' ? !canBatch : !valid || !title.trim())}
+              onClick={() =>
+                void act(async () => {
+                  if (mode === 'batch') {
+                    await api('/projects/' + project.id + '/proposals/process', 'POST', {
+                      items: selected.map((p) => ({ id: p.id, revision: p.revision })),
+                    });
+                    selection.clear();
+                    setMode(null);
+                  } else await save(mode === 'setup');
+                })
+              }
+            >
+              {busy ? (
+                <Loader2 size={15} className="spin" />
+              ) : mode === 'setup' || mode === 'batch' ? (
+                <Play size={15} />
+              ) : (
+                <Save size={15} />
+              )}{' '}
+              {mode === 'setup' || mode === 'batch' ? 'Proses video' : 'Simpan revisi'}
+            </Button>
+          </>
+        }
+      >
+        {dialogError && (
+          <p className="notice" role="alert">
+            {dialogError} Tutup dan buka ulang usulan untuk memuat revisi terbaru jika terjadi
+            konflik.
+          </p>
+        )}
+        {mode === 'batch' ? (
+          <ul>
+            {selected.map((p) => (
+              <li key={p.id}>
+                {p.title} · {tc(p.start)}–{tc(p.end)} · {p.settings.aspect_ratio} ·{' '}
+                {p.settings.visual_mode}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="mg-dialog-form review-dialog-content">
+            <div className="review-range">
+              <strong>{title}</strong>
+              <span>
+                {tc(a)}–{tc(b)} · {stamp((b - a) / 30)}
+              </span>
+            </div>
+            <label>
+              Tampilan video
+              <select
+                aria-label="Tampilan video"
+                value={settings.visual_mode}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    visual_mode: e.target.value as Settings['visual_mode'],
+                    mix_max_per_minute: null,
+                  })
+                }
+              >
+                <option value="podcast">Podcast saja</option>
+                <option value="mix">Mix</option>
+              </select>
+            </label>
+            {settings.visual_mode === 'mix' && (
+              <>
+                <TagSelect
+                  prefix=""
+                  noun="instansi"
+                  max={100}
+                  label="Instansi sumber · opsional"
+                  options={owners.map((i) => ({ id: i.id, label: i.name }))}
+                  value={settings.instansi_ids}
+                  onChange={(ids) =>
+                    setSettings({
+                      ...settings,
+                      instansi_ids: ids,
+                      include_global:
+                        !settings.instansi_ids.length || !ids.length
+                          ? true
+                          : settings.include_global,
+                    })
+                  }
+                />
+                {settings.instansi_ids.length > 0 && (
+                  <label className="source-global-toggle">
+                    <input
+                      type="checkbox"
+                      checked={settings.include_global}
+                      onChange={(e) =>
+                        setSettings({ ...settings, include_global: e.target.checked })
+                      }
+                    />
+                    Sertakan video Global
+                  </label>
+                )}
+                <p className="field-help">Sumber: {sourceSummary}</p>
+              </>
+            )}
+            <fieldset className="ratio-options">
+              <legend>Rasio video</legend>
+              {formats.map((f) => (
+                <button
+                  type="button"
+                  key={f.id}
+                  aria-pressed={settings.aspect_ratio === f.id}
+                  className={settings.aspect_ratio === f.id ? 'active' : ''}
+                  onClick={() => setSettings({ ...settings, aspect_ratio: f.id })}
+                >
+                  <span className="ratio-icon">
+                    <i style={{ aspectRatio: f.width + '/' + f.height, width: 24 }} />
+                  </span>
+                  <strong>{f.id}</strong>
+                  <small>{f.label}</small>
+                </button>
+              ))}
+            </fieldset>
+            <div className="mg-range-fields">
+              <label>
+                Tampilan subtitle
+                <select
+                  aria-label="Tampilan subtitle"
+                  value={settings.subtitle_mode}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      subtitle_mode: e.target.value as Settings['subtitle_mode'],
+                    })
+                  }
+                >
+                  <option value="sentence">Kalimat</option>
+                  <option value="word">Kata per kata</option>
+                </select>
+              </label>
+              <label>
+                Animasi subtitle
+                <select
+                  aria-label="Animasi subtitle"
+                  value={settings.subtitle_animation}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      subtitle_animation: e.target.value as Settings['subtitle_animation'],
+                    })
+                  }
+                >
+                  <option value="none">Tanpa animasi</option>
+                  <option value="soft_zoom">Zoom halus</option>
+                </select>
+              </label>
+            </div>
+            {settings.visual_mode === 'mix' && (
+              <>
+                <div className="mix-density">
+                  {mixCapacity(b - a) <= 1 ? (
+                    <p>
+                      Maksimal 1 sisipan, hingga{' '}
+                      {durationLabel(Math.min(150, Math.floor((b - a) * 0.3)))}.
+                    </p>
+                  ) : (
+                    <>
+                      <label className="source-global-toggle">
+                        <input
+                          type="checkbox"
+                          checked={settings.mix_max_per_minute !== null}
+                          onChange={(e) =>
+                            setSettings({
+                              ...settings,
+                              mix_max_per_minute: e.target.checked ? mixCapacity(b - a) : null,
+                            })
+                          }
+                        />
+                        Batasi jumlah sisipan per menit
+                      </label>
+                      {settings.mix_max_per_minute !== null && (
+                        <label>
+                          Maksimal sisipan per menit
+                          <select
+                            aria-label="Maksimal sisipan per menit"
+                            value={settings.mix_max_per_minute}
+                            onChange={(e) =>
+                              setSettings({
+                                ...settings,
+                                mix_max_per_minute: Number(e.target.value),
+                              })
+                            }
+                          >
+                            {Array.from({ length: mixCapacity(b - a) }, (_, i) => (
+                              <option key={i + 1} value={i + 1}>
+                                {i + 1}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
+                    </>
+                  )}
+                  <p className="field-help">
+                    Jumlah sisipan mengikuti kecocokan pembahasan. Jika batasnya 5 tetapi hanya 3
+                    yang relevan, hanya 3 sisipan yang digunakan.
+                  </p>
+                  <p className="field-help">
+                    Sisipan 3–5 detik; maksimal 30% setiap menit, termasuk sisa menit. Sisipan hanya
+                    ditambahkan jika ada adegan yang relevan.
+                  </p>
+                </div>
+                <TagSelect
+                  label="Batasi topik sisipan — opsional"
+                  options={options}
+                  value={settings.mix_hashtags}
+                  onChange={(v) => setSettings({ ...settings, mix_hashtags: v })}
+                />
+                <p className="field-help">
+                  {
+                    allowed.filter((v) =>
+                      settings.mix_hashtags.every((t) => v.hashtags.includes(t)),
+                    ).length
+                  }{' '}
+                  video siap digunakan. Semua hashtag terpilih wajib dimiliki kandidat.
+                </p>
+                {!allowed.some((v) =>
+                  settings.mix_hashtags.every((t) => v.hashtags.includes(t)),
+                ) && (
+                  <p className="notice">
+                    Tidak ada sisipan yang sesuai. Video tetap diproses dengan tampilan podcast.
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </Dialog>
+    </main>
+  );
 }

@@ -251,42 +251,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/gemini-config": {
+    "/api/projects/{pid}/searches": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get Config */
-        get: operations["get_config_api_gemini_config_get"];
+        /** List Searches */
+        get: operations["list_searches_api_projects__pid__searches_get"];
         put?: never;
-        /** Add */
-        post: operations["add_api_gemini_config_post"];
+        /** Create Search */
+        post: operations["create_search_api_projects__pid__searches_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/gemini-config/order": {
+    "/api/source-projects": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Source Projects */
+        get: operations["source_projects_api_source_projects_get"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        /** Order */
-        patch: operations["order_api_gemini_config_order_patch"];
+        patch?: never;
         trace?: never;
     };
-    "/api/gemini-config/{ident}": {
+    "/api/jobs/{id}/router": {
         parameters: {
             query?: never;
             header?: never;
@@ -295,26 +295,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post?: never;
-        /** Remove */
-        delete: operations["remove_api_gemini_config__ident__delete"];
-        options?: never;
-        head?: never;
-        /** Edit */
-        patch: operations["edit_api_gemini_config__ident__patch"];
-        trace?: never;
-    };
-    "/api/gemini-config/{ident}/test": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Test */
-        post: operations["test_api_gemini_config__ident__test_post"];
+        /** Resume */
+        post: operations["resume_api_jobs__id__router_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -389,15 +371,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/gemini-connections": {
+    "/api/ai/status": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Gemini Connections */
-        get: operations["gemini_connections_api_gemini_connections_get"];
+        /** Ai Status */
+        get: operations["ai_status_api_ai_status_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -436,6 +418,74 @@ export interface paths {
         /** Create Project */
         post: operations["create_project_api_projects_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sources/inspect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Source Metadata */
+        post: operations["source_metadata_api_sources_inspect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{pid}/highlight-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listing */
+        get: operations["listing_api_projects__pid__highlight_requests_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/highlight-requests/{id}/reanalyze": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reanalyze */
+        post: operations["reanalyze_api_highlight_requests__id__reanalyze_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/highlight-requests/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove */
+        delete: operations["remove_api_highlight_requests__id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -926,18 +976,6 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** Add */
-        Add: {
-            /** Revision */
-            revision: string;
-            /** Name */
-            name: string;
-            /**
-             * Key
-             * Format: password
-             */
-            key: string;
-        };
         /** Approval */
         Approval: {
             /**
@@ -1161,36 +1199,6 @@ export interface components {
             /** Plan */
             plan: components["schemas"]["EditPlanV2"] | components["schemas"]["EditPlan"];
         };
-        /** ConfigView */
-        ConfigView: {
-            /**
-             * Max Connections
-             * @default 5
-             */
-            max_connections: number;
-            /** Revision */
-            revision: string;
-            /** Connections */
-            connections: components["schemas"]["GeminiConnectionView"][];
-        };
-        /** ConnectionCooldown */
-        ConnectionCooldown: {
-            /** Model */
-            model: string;
-            /** Status */
-            status: string;
-            /** Next Attempt At */
-            next_attempt_at?: string | null;
-        };
-        /** Edit */
-        Edit: {
-            /** Revision */
-            revision: string;
-            /** Name */
-            name: string;
-            /** Key */
-            key?: string | null;
-        };
         /** EditPlan */
         EditPlan: {
             /** Start */
@@ -1308,37 +1316,6 @@ export interface components {
             end: number;
             /** Text */
             text: string;
-        };
-        /** GeminiConnectionView */
-        GeminiConnectionView: {
-            /**
-             * Masked Key
-             * @default ••••••••
-             */
-            masked_key: string;
-            /** Id */
-            id: string;
-            /** Label */
-            label: string;
-            /** Priority */
-            priority: number;
-            /** Status */
-            status: string;
-            /** Models */
-            models: string[];
-            /** Used Models */
-            used_models?: string[];
-            /**
-             * Catalog Refreshing
-             * @default false
-             */
-            catalog_refreshing: boolean;
-            /** Catalog Error */
-            catalog_error?: string | null;
-            /** Catalog Fetched At */
-            catalog_fetched_at?: string | null;
-            /** Cooldowns */
-            cooldowns: components["schemas"]["ConnectionCooldown"][];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1513,14 +1490,9 @@ export interface components {
         /** ModelSelection */
         ModelSelection: {
             /** Gemini Model */
-            gemini_model: string;
-        };
-        /** Order */
-        Order: {
-            /** Revision */
-            revision: string;
-            /** Ids */
-            ids: string[];
+            gemini_model?: string | null;
+            /** Ai Combo */
+            ai_combo?: string | null;
         };
         /** Overlay */
         Overlay: {
@@ -1552,7 +1524,9 @@ export interface components {
         /** ProjectInput */
         ProjectInput: {
             /** Gemini Model */
-            gemini_model: string;
+            gemini_model?: string | null;
+            /** Ai Combo */
+            ai_combo?: string | null;
             /**
              * Workflow
              * @default legacy
@@ -1614,6 +1588,10 @@ export interface components {
         };
         /** ProjectView */
         ProjectView: {
+            /** Ai Combo */
+            ai_combo?: string | null;
+            /** Source Id */
+            source_id?: string | null;
             /**
              * Workflow
              * @default legacy
@@ -1621,6 +1599,10 @@ export interface components {
             workflow: string;
             /** Review Counts */
             review_counts?: {
+                [key: string]: unknown;
+            };
+            /** Highlight Request Counts */
+            highlight_request_counts?: {
                 [key: string]: unknown;
             };
             /** Instansi Ids */
@@ -1756,10 +1738,36 @@ export interface components {
             /** Instansi Ids */
             instansi_ids: string[];
         };
-        /** Revision */
-        Revision: {
+        /** RequestView */
+        RequestView: {
+            /** Id */
+            id: string;
+            /** Number */
+            number: number;
             /** Revision */
-            revision: string;
+            revision: number;
+            /** Status */
+            status: string;
+            /** Reason */
+            reason: string;
+            /** Snapshot */
+            snapshot: {
+                [key: string]: unknown;
+            };
+            proposal: components["schemas"]["ProposalView"] | null;
+            job: components["schemas"]["JobView"] | null;
+        };
+        /** RetryInput */
+        RetryInput: {
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /** Revision */
+            revision: number;
+            /** Ai Combo */
+            ai_combo: string;
         };
         /** Scene */
         Scene: {
@@ -1769,6 +1777,63 @@ export interface components {
             end: number;
             /** Explain */
             explain: string;
+        };
+        /** SearchInput */
+        SearchInput: {
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /** Ai Combo */
+            ai_combo: string;
+            /**
+             * Highlight Count
+             * @default 1
+             */
+            highlight_count: number;
+            /**
+             * Additional Prompt
+             * @default
+             */
+            additional_prompt: string;
+            /**
+             * Avoid Used
+             * @default true
+             */
+            avoid_used: boolean;
+            /**
+             * Policy Version
+             * @default 1
+             */
+            policy_version: number;
+            /** Time Range */
+            time_range?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /** SearchView */
+        SearchView: {
+            /** Id */
+            id: string;
+            /** Project Id */
+            project_id: string;
+            /** Combo */
+            combo: string;
+            /** Prompt */
+            prompt: string;
+            /** Count */
+            count: number;
+            /** Avoid Used */
+            avoid_used: boolean;
+            /** Completed */
+            completed: boolean;
+            /** Report */
+            report: {
+                [key: string]: unknown;
+            };
+            /** Job Id */
+            job_id: string | null;
         };
         /** Segment */
         Segment: {
@@ -1789,6 +1854,24 @@ export interface components {
             broll?: components["schemas"]["Broll"][];
             /** Excluded Word Ids */
             excluded_word_ids?: string[];
+        };
+        /** SourceInput */
+        SourceInput: {
+            /** Url */
+            url: string;
+        };
+        /** SourceMetadata */
+        SourceMetadata: {
+            /** Url */
+            url: string;
+            /** Title */
+            title: string;
+            /** Duration */
+            duration: number;
+            /** Min Duration */
+            min_duration: number;
+            /** Max Duration */
+            max_duration: number;
         };
         /** Style */
         Style: {
@@ -1857,18 +1940,6 @@ export interface components {
              * @default 0
              */
             video_count: number;
-        };
-        /** Test */
-        Test: {
-            /** Model */
-            model?: string | null;
-        };
-        /** TestResult */
-        TestResult: {
-            /** Ok */
-            ok: boolean;
-            /** Message */
-            message: string;
         };
         /** TimelineFilter */
         TimelineFilter: {
@@ -2071,6 +2142,8 @@ export interface components {
             include_global: boolean;
             /** Mix Hashtags */
             mix_hashtags?: string[];
+            /** Mix Max Per Minute */
+            mix_max_per_minute?: number | null;
         };
         /** VisualStyle */
         VisualStyle: {
@@ -2754,7 +2827,9 @@ export interface operations {
     };
     remove_api_proposals__id__delete: {
         parameters: {
-            query?: never;
+            query?: {
+                commit?: unknown;
+            };
             header?: never;
             path: {
                 id: string;
@@ -2889,9 +2964,77 @@ export interface operations {
             };
         };
     };
-    get_config_api_gemini_config_get: {
+    list_searches_api_projects__pid__searches_get: {
         parameters: {
             query?: never;
+            header?: never;
+            path: {
+                pid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_search_api_projects__pid__searches_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SearchInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    source_projects_api_source_projects_get: {
+        parameters: {
+            query: {
+                url: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2904,31 +3047,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConfigView"];
-                };
-            };
-        };
-    };
-    add_api_gemini_config_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["Add"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConfigView"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -2942,121 +3061,18 @@ export interface operations {
             };
         };
     };
-    order_api_gemini_config_order_patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["Order"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConfigView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    remove_api_gemini_config__ident__delete: {
+    resume_api_jobs__id__router_post: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                ident: string;
+                id: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["Revision"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConfigView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    edit_api_gemini_config__ident__patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                ident: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["Edit"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConfigView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    test_api_gemini_config__ident__test_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                ident: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": components["schemas"]["Test"] | null;
+                "application/json": components["schemas"]["ModelSelection"];
             };
         };
         responses: {
@@ -3066,7 +3082,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TestResult"];
+                    "application/json": components["schemas"]["JobView"];
                 };
             };
             /** @description Validation Error */
@@ -3184,7 +3200,7 @@ export interface operations {
             };
         };
     };
-    gemini_connections_api_gemini_connections_get: {
+    ai_status_api_ai_status_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3199,7 +3215,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["GeminiConnectionView"][];
+                    "application/json": unknown;
                 };
             };
         };
@@ -3226,7 +3242,9 @@ export interface operations {
     };
     projects_api_projects_get: {
         parameters: {
-            query?: never;
+            query?: {
+                view?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -3240,6 +3258,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -3264,6 +3291,138 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    source_metadata_api_sources_inspect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceMetadata"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listing_api_projects__pid__highlight_requests_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reanalyze_api_highlight_requests__id__reanalyze_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetryInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_api_highlight_requests__id__delete: {
+        parameters: {
+            query: {
+                revision: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

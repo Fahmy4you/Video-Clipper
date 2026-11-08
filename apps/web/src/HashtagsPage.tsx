@@ -1,39 +1,403 @@
-import {useEffect,useMemo,useState} from 'react';
-import {Hash,Plus,Search,Pencil,Trash2,Loader2,AlertCircle,Video,Check,X} from 'lucide-react';
-import {api} from './api';
-import {Button} from './components/ui/button';
-import {ActionMenu,ActionItem,Dialog,Pagination,useConfirm} from './components/Ui';
-import {BulkBar,SelectionToggle,SelectCheckbox,useBulkSelection,deleteSelected,deletionMessage} from './components/BulkSelection';
-import {FilterDock,SortSelect} from './components/ListFilters';
-import {compareNames} from './listFilters';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  Hash,
+  Plus,
+  Search,
+  Pencil,
+  Trash2,
+  Loader2,
+  AlertCircle,
+  Video,
+  Check,
+  X,
+} from 'lucide-react';
+import { api } from './api';
+import { Button } from './components/ui/button';
+import { ActionMenu, ActionItem, Dialog, Pagination, useConfirm } from './components/Ui';
+import {
+  BulkBar,
+  SelectionToggle,
+  SelectCheckbox,
+  useBulkSelection,
+  deleteSelected,
+  deletionMessage,
+} from './components/BulkSelection';
+import { FilterDock, SortSelect } from './components/ListFilters';
+import { compareNames } from './listFilters';
 import './management.css';
 
-export type Hashtag={id:string;name_tag:string;video_count:number};
+export type Hashtag = { id: string; name_tag: string; video_count: number };
 
-export function HashtagsPage(){
-  const confirm=useConfirm();
-  const [tags,setTags]=useState<Hashtag[]>([]),[name,setName]=useState(''),[editing,setEditing]=useState<Hashtag|null>(null),[dialogOpen,setDialogOpen]=useState(false),[query,setQuery]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[page,setPage]=useState(1),[deleting,setDeleting]=useState(false),[progress,setProgress]=useState(0),[result,setResult]=useState('');
-  const selection=useBulkSelection(tags.map(tag=>tag.id));
- const [sort,setSort]=useState('name');
- const sortOptions=[{value:'name',label:'Nama · A–Z'},{value:'video-desc',label:'Jumlah video · terbanyak'},{value:'video-asc',label:'Jumlah video · tersedikit'}];
- async function refresh(){setTags(await api<Hashtag[]>('/hashtags'))}
-  useEffect(()=>{void refresh().catch(e=>setError(e.message)).finally(()=>setLoading(false))},[]);
-  async function action(fn:()=>Promise<void>){setBusy(true);setError('');try{await fn();await refresh()}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
-  const filtered=useMemo(()=>tags.filter(t=>t.name_tag.includes(query.trim().replace(/^#/,'').toLowerCase())).sort((a,b)=>(sort==='name'?0:(a.video_count-b.video_count)*(sort==='video-asc'?1:-1))||compareNames(a.name_tag,b.name_tag)||a.id.localeCompare(b.id)),[tags,query,sort]);
-  const currentPage=Math.min(page,Math.max(1,Math.ceil(filtered.length/25))),rows=filtered.slice((currentPage-1)*25,currentPage*25);
-  function openEditor(tag:Hashtag|null){setEditing(tag);setName(tag?.name_tag||'');setError('');setDialogOpen(true)}
-  async function remove(tag:Hashtag){if(await confirm({title:'Hapus #'+tag.name_tag+'?',description:'Hashtag ini akan dilepas dari '+tag.video_count+' video dan dihapus dari daftar. Semua video beserta filenya tetap tersimpan, termasuk video yang tidak lagi memiliki hashtag.',confirmLabel:'Hapus hashtag',danger:true}))await action(async()=>{await api('/hashtags/'+tag.id,'DELETE');if(editing?.id===tag.id){setEditing(null);setName('');setDialogOpen(false)}})}
-  async function removeSelected(){const ids=[...selection.selected];if(!ids.length||deleting)return;if(!await confirm({title:'Hapus '+ids.length+' hashtag?',description:'Hashtag terpilih beserta relasinya akan dihapus. Video tetap tersimpan, termasuk video yang kehilangan satu-satunya hashtag.',confirmLabel:'Hapus hashtag',danger:true}))return;setDeleting(true);setProgress(0);setError('');setResult('');try{const outcome=await deleteSelected(ids,id=>'/hashtags/'+id,setProgress);setTags(rows=>rows.filter(t=>!outcome.deleted.includes(t.id)));selection.remove(outcome.deleted);setResult(deletionMessage(outcome));await refresh()}catch(e){setError((e as Error).message)}finally{setDeleting(false)}}
-  return <main className="mg-page mg-tags-page">
-    <header className="mg-page-header selection-page-header"><div><h1>Hashtag</h1><p>Kelola label bersama untuk menemukan dan memilih video Mix.</p></div><div className="page-header-actions"><SelectionToggle active={selection.selecting} onToggle={selection.toggleMode} disabled={loading||busy||deleting||(!selection.selecting&&!tags.length)}/><Button disabled={deleting} onClick={()=>openEditor(null)}><Plus size={17}/>Hashtag</Button></div></header>
-    {result&&<p className="bulk-result" role="status">{result}</p>}
-    {error&&!dialogOpen&&<p role="alert" className="notice"><AlertCircle size={17}/>{error}</p>}
-    <section className="mg-table-panel" aria-label="Daftar hashtag"><div className="mg-table-toolbar"><div className="mg-search"><Search size={17}/><input aria-label="Cari daftar hashtag" placeholder="Cari hashtag…" value={query} onChange={e=>{setQuery(e.target.value);setPage(1)}}/>{query&&<button type="button" aria-label="Hapus pencarian" title="Hapus pencarian" onClick={()=>{setQuery('');setPage(1)}}><X size={16}/></button>}</div><span>{filtered.length} hashtag</span></div>
-      <FilterDock active={sort!=='name'} summary={sortOptions.find(o=>o.value===sort)?.label||''} onReset={()=>{setSort('name');setPage(1)}}><SortSelect value={sort} onChange={v=>{setSort(v);setPage(1)}} options={sortOptions}/></FilterDock>
-      {selection.selecting&&!loading&&tags.length>0&&<BulkBar selected={selection.selected} visibleIds={rows.map(t=>t.id)} onTogglePage={()=>selection.togglePage(rows.map(t=>t.id))} onClear={selection.clear} onDelete={()=>void removeSelected()} disabled={busy||deleting} deleting={deleting} progress={progress}/>}
-      {loading?<div className="mg-empty" role="status"><Loader2 className="spin" size={28}/><p>Memuat hashtag…</p></div>:filtered.length?<><table className={'mg-tag-table '+(selection.selecting?'has-selection-column':'')}><thead><tr>{selection.selecting&&<th scope="col" className="selection-column"><span className="sr-only">Pilih</span></th>}<th scope="col">Nama hashtag</th><th scope="col">Video terhubung</th><th scope="col"><span className="mg-sr-only">Aksi</span></th></tr></thead><tbody>{rows.map(tag=><tr key={tag.id} className={selection.selected.has(tag.id)?'is-selected':''}>{selection.selecting&&<td className="selection-column"><SelectCheckbox label={'Pilih hashtag '+tag.name_tag} checked={selection.selected.has(tag.id)} disabled={busy||deleting} onChange={()=>selection.toggle(tag.id)}/></td>}<td><span className="mg-tag-name"><Hash size={16}/><span>{tag.name_tag}</span></span></td><td><span className="mg-tag-count"><Video size={15}/>{tag.video_count}<span className="mg-count-label"> video</span></span></td><td><ActionMenu label={'Aksi hashtag '+tag.name_tag}><ActionItem disabled={busy||deleting} onClick={()=>openEditor(tag)}><Pencil size={16}/>Ubah nama</ActionItem><ActionItem disabled={busy||deleting} danger onClick={()=>void remove(tag)}><Trash2 size={16}/>Hapus hashtag</ActionItem></ActionMenu></td></tr>)}</tbody></table><Pagination page={currentPage} total={filtered.length} pageSize={25} onChange={setPage}/></>:<div className="mg-empty"><span className="mg-empty-icon"><Hash size={26}/></span><h2>{query?'Hashtag tidak ditemukan':'Belum ada hashtag'}</h2><p>{query?'Coba kata pencarian lain.':'Tambahkan label agar video lebih mudah dicari dan digunakan dalam Mix.'}</p>{!query&&<Button variant="secondary" onClick={()=>openEditor(null)}><Plus size={16}/>Hashtag</Button>}</div>}
-    </section>
-    <p className="mg-page-note"><Hash size={15}/>Satu hashtag dapat dipakai di banyak video. Menghapusnya hanya melepas relasi; video tetap tersimpan.</p>
-    <Dialog open={dialogOpen} onClose={()=>{if(!busy)setDialogOpen(false)}} title={editing?'Ubah nama hashtag':'Tambah hashtag'} description="Gunakan nama singkat yang menjelaskan isi atau tema video." footer={<><Button variant="secondary" disabled={busy||deleting} type="button" onClick={()=>setDialogOpen(false)}>Batal</Button><Button disabled={busy||!name.trim()} form="hashtag-form">{busy?<Loader2 size={16} className="spin"/>:editing?<Check size={16}/>:<Plus size={16}/>} {editing?'Simpan nama':'Hashtag'}</Button></>}><form id="hashtag-form" className="mg-dialog-form" onSubmit={e=>{e.preventDefault();void action(async()=>{await api(editing?'/hashtags/'+editing.id:'/hashtags',editing?'PATCH':'POST',{name_tag:name});setName('');setEditing(null);setDialogOpen(false)})}}><label>Nama hashtag<input autoFocus aria-label="Nama hashtag" required maxLength={60} placeholder="Contoh: luxury atau mobil_sport" value={name} onChange={e=>setName(e.target.value)}/><small>Nama harus unik. Gunakan underscore untuk memisahkan kata.</small></label>{error&&<p className="mg-form-error" role="alert">{error}</p>}</form></Dialog>
-  </main>;
+export function HashtagsPage() {
+  const confirm = useConfirm();
+  const [tags, setTags] = useState<Hashtag[]>([]),
+    [name, setName] = useState(''),
+    [editing, setEditing] = useState<Hashtag | null>(null),
+    [dialogOpen, setDialogOpen] = useState(false),
+    [query, setQuery] = useState(''),
+    [error, setError] = useState(''),
+    [busy, setBusy] = useState(false),
+    [loading, setLoading] = useState(true),
+    [page, setPage] = useState(1),
+    [deleting, setDeleting] = useState(false),
+    [progress, setProgress] = useState(0),
+    [result, setResult] = useState('');
+  const selection = useBulkSelection(tags.map((tag) => tag.id));
+  const [sort, setSort] = useState('name');
+  const sortOptions = [
+    { value: 'name', label: 'Nama · A–Z' },
+    { value: 'video-desc', label: 'Jumlah video · terbanyak' },
+    { value: 'video-asc', label: 'Jumlah video · tersedikit' },
+  ];
+  async function refresh() {
+    setTags(await api<Hashtag[]>('/hashtags'));
+  }
+  useEffect(() => {
+    void refresh()
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+  async function action(fn: () => Promise<void>) {
+    setBusy(true);
+    setError('');
+    try {
+      await fn();
+      await refresh();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  const filtered = useMemo(
+    () =>
+      tags
+        .filter((t) => t.name_tag.includes(query.trim().replace(/^#/, '').toLowerCase()))
+        .sort(
+          (a, b) =>
+            (sort === 'name'
+              ? 0
+              : (a.video_count - b.video_count) * (sort === 'video-asc' ? 1 : -1)) ||
+            compareNames(a.name_tag, b.name_tag) ||
+            a.id.localeCompare(b.id),
+        ),
+    [tags, query, sort],
+  );
+  const currentPage = Math.min(page, Math.max(1, Math.ceil(filtered.length / 25))),
+    rows = filtered.slice((currentPage - 1) * 25, currentPage * 25);
+  function openEditor(tag: Hashtag | null) {
+    setEditing(tag);
+    setName(tag?.name_tag || '');
+    setError('');
+    setDialogOpen(true);
+  }
+  async function remove(tag: Hashtag) {
+    if (
+      await confirm({
+        title: 'Hapus #' + tag.name_tag + '?',
+        description:
+          'Hashtag ini akan dilepas dari ' +
+          tag.video_count +
+          ' video dan dihapus dari daftar. Semua video beserta filenya tetap tersimpan, termasuk video yang tidak lagi memiliki hashtag.',
+        confirmLabel: 'Hapus hashtag',
+        danger: true,
+      })
+    )
+      await action(async () => {
+        await api('/hashtags/' + tag.id, 'DELETE');
+        if (editing?.id === tag.id) {
+          setEditing(null);
+          setName('');
+          setDialogOpen(false);
+        }
+      });
+  }
+  async function removeSelected() {
+    const ids = [...selection.selected];
+    if (!ids.length || deleting) return;
+    if (
+      !(await confirm({
+        title: 'Hapus ' + ids.length + ' hashtag?',
+        description:
+          'Hashtag terpilih beserta relasinya akan dihapus. Video tetap tersimpan, termasuk video yang kehilangan satu-satunya hashtag.',
+        confirmLabel: 'Hapus hashtag',
+        danger: true,
+      }))
+    )
+      return;
+    setDeleting(true);
+    setProgress(0);
+    setError('');
+    setResult('');
+    try {
+      const outcome = await deleteSelected(ids, (id) => '/hashtags/' + id, setProgress);
+      setTags((rows) => rows.filter((t) => !outcome.deleted.includes(t.id)));
+      selection.remove(outcome.deleted);
+      setResult(deletionMessage(outcome));
+      await refresh();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setDeleting(false);
+    }
+  }
+  return (
+    <main className="mg-page mg-tags-page">
+      <header className="mg-page-header selection-page-header">
+        <div>
+          <h1>Hashtag</h1>
+          <p>Kelola label bersama untuk menemukan dan memilih video Mix.</p>
+        </div>
+        <div className="page-header-actions">
+          <SelectionToggle
+            active={selection.selecting}
+            onToggle={selection.toggleMode}
+            disabled={loading || busy || deleting || (!selection.selecting && !tags.length)}
+          />
+          <Button disabled={deleting} onClick={() => openEditor(null)}>
+            <Plus size={17} />
+            Hashtag
+          </Button>
+        </div>
+      </header>
+      {result && (
+        <p className="bulk-result" role="status">
+          {result}
+        </p>
+      )}
+      {error && !dialogOpen && (
+        <p role="alert" className="notice">
+          <AlertCircle size={17} />
+          {error}
+        </p>
+      )}
+      <section className="mg-table-panel" aria-label="Daftar hashtag">
+        <div className="mg-table-toolbar">
+          <div className="mg-search">
+            <Search size={17} />
+            <input
+              aria-label="Cari daftar hashtag"
+              placeholder="Cari hashtag…"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setPage(1);
+              }}
+            />
+            {query && (
+              <button
+                type="button"
+                aria-label="Hapus pencarian"
+                title="Hapus pencarian"
+                onClick={() => {
+                  setQuery('');
+                  setPage(1);
+                }}
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
+          <span>{filtered.length} hashtag</span>
+        </div>
+        <FilterDock
+          active={sort !== 'name'}
+          summary={sortOptions.find((o) => o.value === sort)?.label || ''}
+          onReset={() => {
+            setSort('name');
+            setPage(1);
+          }}
+        >
+          <SortSelect
+            value={sort}
+            onChange={(v) => {
+              setSort(v);
+              setPage(1);
+            }}
+            options={sortOptions}
+          />
+        </FilterDock>
+        {selection.selecting && !loading && tags.length > 0 && (
+          <BulkBar
+            selected={selection.selected}
+            visibleIds={rows.map((t) => t.id)}
+            onTogglePage={() => selection.togglePage(rows.map((t) => t.id))}
+            onClear={selection.clear}
+            onDelete={() => void removeSelected()}
+            disabled={busy || deleting}
+            deleting={deleting}
+            progress={progress}
+          />
+        )}
+        {loading ? (
+          <div className="mg-empty" role="status">
+            <Loader2 className="spin" size={28} />
+            <p>Memuat hashtag…</p>
+          </div>
+        ) : filtered.length ? (
+          <>
+            <table
+              className={'mg-tag-table ' + (selection.selecting ? 'has-selection-column' : '')}
+            >
+              <thead>
+                <tr>
+                  {selection.selecting && (
+                    <th scope="col" className="selection-column">
+                      <span className="sr-only">Pilih</span>
+                    </th>
+                  )}
+                  <th scope="col">Nama hashtag</th>
+                  <th scope="col">Video terhubung</th>
+                  <th scope="col">
+                    <span className="mg-sr-only">Aksi</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((tag) => (
+                  <tr key={tag.id} className={selection.selected.has(tag.id) ? 'is-selected' : ''}>
+                    {selection.selecting && (
+                      <td className="selection-column">
+                        <SelectCheckbox
+                          label={'Pilih hashtag ' + tag.name_tag}
+                          checked={selection.selected.has(tag.id)}
+                          disabled={busy || deleting}
+                          onChange={() => selection.toggle(tag.id)}
+                        />
+                      </td>
+                    )}
+                    <td>
+                      <span className="mg-tag-name">
+                        <Hash size={16} />
+                        <span>{tag.name_tag}</span>
+                      </span>
+                    </td>
+                    <td>
+                      <span className="mg-tag-count">
+                        <Video size={15} />
+                        {tag.video_count}
+                        <span className="mg-count-label"> video</span>
+                      </span>
+                    </td>
+                    <td>
+                      <ActionMenu label={'Aksi hashtag ' + tag.name_tag}>
+                        <ActionItem disabled={busy || deleting} onClick={() => openEditor(tag)}>
+                          <Pencil size={16} />
+                          Ubah nama
+                        </ActionItem>
+                        <ActionItem
+                          disabled={busy || deleting}
+                          danger
+                          onClick={() => void remove(tag)}
+                        >
+                          <Trash2 size={16} />
+                          Hapus hashtag
+                        </ActionItem>
+                      </ActionMenu>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <Pagination
+              page={currentPage}
+              total={filtered.length}
+              pageSize={25}
+              onChange={setPage}
+            />
+          </>
+        ) : (
+          <div className="mg-empty">
+            <span className="mg-empty-icon">
+              <Hash size={26} />
+            </span>
+            <h2>{query ? 'Hashtag tidak ditemukan' : 'Belum ada hashtag'}</h2>
+            <p>
+              {query
+                ? 'Coba kata pencarian lain.'
+                : 'Tambahkan label agar video lebih mudah dicari dan digunakan dalam Mix.'}
+            </p>
+            {!query && (
+              <Button variant="secondary" onClick={() => openEditor(null)}>
+                <Plus size={16} />
+                Hashtag
+              </Button>
+            )}
+          </div>
+        )}
+      </section>
+      <p className="mg-page-note">
+        <Hash size={15} />
+        Satu hashtag dapat dipakai di banyak video. Menghapusnya hanya melepas relasi; video tetap
+        tersimpan.
+      </p>
+      <Dialog
+        open={dialogOpen}
+        onClose={() => {
+          if (!busy) setDialogOpen(false);
+        }}
+        title={editing ? 'Ubah nama hashtag' : 'Tambah hashtag'}
+        description="Gunakan nama singkat yang menjelaskan isi atau tema video."
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              disabled={busy || deleting}
+              type="button"
+              onClick={() => setDialogOpen(false)}
+            >
+              Batal
+            </Button>
+            <Button disabled={busy || !name.trim()} form="hashtag-form">
+              {busy ? (
+                <Loader2 size={16} className="spin" />
+              ) : editing ? (
+                <Check size={16} />
+              ) : (
+                <Plus size={16} />
+              )}{' '}
+              {editing ? 'Simpan nama' : 'Hashtag'}
+            </Button>
+          </>
+        }
+      >
+        <form
+          id="hashtag-form"
+          className="mg-dialog-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void action(async () => {
+              await api(
+                editing ? '/hashtags/' + editing.id : '/hashtags',
+                editing ? 'PATCH' : 'POST',
+                { name_tag: name },
+              );
+              setName('');
+              setEditing(null);
+              setDialogOpen(false);
+            });
+          }}
+        >
+          <label>
+            Nama hashtag
+            <input
+              autoFocus
+              aria-label="Nama hashtag"
+              required
+              maxLength={60}
+              placeholder="Contoh: luxury atau mobil_sport"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+            <small>Nama harus unik. Gunakan underscore untuk memisahkan kata.</small>
+          </label>
+          {error && (
+            <p className="mg-form-error" role="alert">
+              {error}
+            </p>
+          )}
+        </form>
+      </Dialog>
+    </main>
+  );
 }

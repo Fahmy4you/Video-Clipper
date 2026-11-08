@@ -1,0 +1,48 @@
+.router-recovery,
+.recovery-history {
+  margin-block: 16px;
+  padding: 16px;
+}
+
+.router-recovery {
+  display: grid;
+  gap: 16px;
+}
+
+.router-recovery header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.router-recovery p {
+  margin: 0;
+}
+
+.router-recovery .button {
+  justify-self: start;
+}
+
+.recovery-history summary {
+  cursor: pointer;
+  color: var(--text-muted, inherit);
+  font-size: 14px;
+}
+
+.recovery-history ul {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recovery-history li {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.recovery-history time {
+  opacity: 0.7;
+}

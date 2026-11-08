@@ -1,5 +1,25 @@
 /* Page layouts live with their components; this file only defines shared studio interaction policy. */
-.visual-editor,.visual-editor *{-webkit-user-select:none;user-select:none}
-.visual-editor input,.visual-editor textarea,.visual-editor [contenteditable=true]{-webkit-user-select:text;user-select:text}
-body:has(.visual-editor) .source-modal,body:has(.visual-editor) .source-modal *,body:has(.visual-editor) .audio-modal,body:has(.visual-editor) .audio-modal *{user-select:none;-webkit-user-select:none}
-body:has(.visual-editor) .source-modal input,body:has(.visual-editor) .source-modal textarea,body:has(.visual-editor) .audio-modal input{user-select:text;-webkit-user-select:text}
+.visual-editor,
+.visual-editor * {
+  -webkit-user-select: none;
+  user-select: none;
+}
+.visual-editor input,
+.visual-editor textarea,
+.visual-editor [contenteditable='true'] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+body:has(.visual-editor) .source-modal,
+body:has(.visual-editor) .source-modal *,
+body:has(.visual-editor) .audio-modal,
+body:has(.visual-editor) .audio-modal * {
+  user-select: none;
+  -webkit-user-select: none;
+}
+body:has(.visual-editor) .source-modal input,
+body:has(.visual-editor) .source-modal textarea,
+body:has(.visual-editor) .audio-modal input {
+  user-select: text;
+  -webkit-user-select: text;
+}

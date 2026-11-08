@@ -1,6 +1,6 @@
 # video_clipping
 
-Studio lokal untuk YouTube → transcript → highlight Gemini → edit → MP4.
+Studio lokal untuk YouTube → transcript → usulan highlight melalui 9Router → edit → MP4.
 React/TypeScript/Vite + FastAPI/Celery/Redis. PostgreSQL 17 tetap berada di Windows.
 
 ## Mulai
@@ -18,8 +18,8 @@ Buka http://localhost:5173 di Windows. Ctrl+C menghentikan layanan milik launche
 Redis proyek memakai port 6381, API 8000, frontend 5173.
 
 - [Planning](docs/PROJECT_PLAN.md)
-- [Setup PostgreSQL dan Gemini](docs/SETUP.md)
-- [Antrean pekerjaan dan koneksi Gemini cadangan](docs/QUEUE_AND_GEMINI.md)
+- [Setup PostgreSQL dan 9Router](docs/SETUP.md)
+- [Antrean pekerjaan dan 9Router](docs/QUEUE_AND_ROUTER.md)
 - [Status implementasi dan pengujian](docs/STATUS.md)
 
 `npm run build` memeriksa TypeScript dan membangun frontend.
@@ -27,8 +27,11 @@ Redis proyek memakai port 6381, API 8000, frontend 5173.
 `npm run types` memperbarui kontrak TypeScript dari OpenAPI API yang sedang berjalan.
 
 Video, model, log, dan hasil render berada di storage/ dan tidak masuk Git.
-API key Gemini dikelola lewat Pengaturan atau apikey.json di root; perubahan tidak memerlukan restart.
-File asli diabaikan Git, template tersedia di apikey.json.example.
+Koneksi AI memakai 9Router. Isi 9router_base_url dan 9router_key pada .env.
+Perubahan kedua nilai ini berlaku pada permintaan berikutnya tanpa restart.
+Transkripsi audio memakai Whisper lokal: profil Standar (`small`) atau Ringan (`base`) melalui `WHISPER_PROFILE`. Teks transkrip dikirim ke combo pilihan. Perubahan profil membutuhkan restart backend/worker dan tidak menimpa transkrip lama.
+Panduan alur baru: [Proyek Transkripsi dan Video](docs/TRANSCRIPTION_PROJECTS.md).
+
 
 Transcript dikirim ke Gemini untuk highlight; media tidak dikirim ke Gemini oleh aplikasi ini.
 
@@ -38,13 +41,13 @@ Transcript dikirim ke Gemini untuk highlight; media tidak dikirim ke Gemini oleh
 Jalankan dari root proyek saat aplikasi aktif, menggunakan environment Node dengan Playwright tersedia.
 Untuk runtime eksternal, atur `PLAYWRIGHT_MODULE` ke path modul Playwright tersebut.
 Screenshot/report disimpan di storage/qa. Data editor adalah fixture terisolasi di browser,
-tidak dimasukkan ke PostgreSQL. Tes ini memeriksa UI, bukan integrasi YouTube/Gemini/database.
+tidak dimasukkan ke PostgreSQL. Tes ini memeriksa UI, bukan integrasi YouTube/9Router/database.
 
 Lihat docs/STATUS.md sebelum menganggap seluruh roadmap selesai.
 
 Perbaikan transkripsi panjang, pemulihan worker, dan pengujian terbaru: [LONG_VIDEO_RECOVERY](docs/LONG_VIDEO_RECOVERY.md).
 
-Daftar model Gemini memakai metadata tanpa prompt pengujian, cache 24 jam, dan pembaruan latar belakang. Panduan: [Katalog model](docs/MODEL_CATALOG.md).
+Daftar combo 9Router memakai metadata tanpa prompt pengujian. Panduan: [Katalog combo](docs/MODEL_CATALOG.md).
 
 Subtitle highlight: [akurasi, tinjauan koreksi, dan mode per kata](docs/SUBTITLES.md). Koleksi Global baru: [laporan pemeriksaan 31 Oktober](docs/GLOBAL_COLLECTION_2026-10-31.md).
 
@@ -67,3 +70,9 @@ Tombol **Filter** menambahkan blok Tajam yang mengikuti waktu highlight, dengan 
 Pengaturan ekspor developer memakai `EXPORT_MODE` (default `global`) dan `EXPORT_LOCAL_DIR` di root `.env`. Mode Global menyediakan tombol **Unduh MP4**; Local menyalin hasil otomatis ke folder yang sudah ada. Restart backend dan worker setelah mengubah konfigurasi. Lihat [penyimpanan ekspor dan transisi](docs/EXPORTS_AND_CUTS.md).
 
 Klik kotak pada batas track Video untuk mengatur transisi podcast maupun sisipan. Split dan trim video minimal satu detik di kedua hasil; elemen audio, teks, subtitle, gambar, dan filter tetap mengikuti ketelitian frame.
+
+## Code formatting
+
+Install frontend tools with `npm install` and Python development tools with `.venv/bin/python -m pip install -r backend/requirements-dev.txt`.
+
+Run `npm run format` to format application code and `npm run format:check` to verify it. Prettier formats TypeScript, JSX, CSS, JSON configuration, and JavaScript scripts. Ruff formats Python application code, migrations, tests, and scripts. Generated types, dependencies, build output, storage, and user media are excluded.

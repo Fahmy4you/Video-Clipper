@@ -1,18 +1,220 @@
-import {useEffect,useRef,useState} from 'react';
-import {RefreshCw,CheckCheck,Play,AlertCircle} from 'lucide-react';
-import {api,type Job} from './api';
-import {useVisual} from './visualStore';
-import {Dialog} from './components/Ui';
-import {isPending} from './components/QueueStatus';
-import {atFrame,type Clip} from './editorModel';
-type Proposal={segment_id:string;caption_id:string;frame:number;before:string;after:string;needs_review:boolean};
-export function SubtitleReview({clip,jobs,save,onApplied,onRefresh,onError,src,dirty}:{clip:Clip;jobs:Job[];save:()=>Promise<void>;onApplied:(c:Clip)=>void;onRefresh:()=>Promise<void>;onError:(s:string)=>void;src:string;dirty:boolean}){
- const [open,setOpen]=useState(false),[busy,setBusy]=useState(false),[chosen,setChosen]=useState<string[]>([]),[started,setStarted]=useState<string|null>(null),[preview,setPreview]=useState<Proposal|null>(null);const video=useRef<HTMLVideoElement>(null);
- const related=jobs.filter(j=>j.kind==='subtitle_refine'&&j.clip_id===clip.id),pending=related.find(isPending),result=related.find(j=>j.status==='succeeded'),proposals=(result?.result.proposals||[]) as Proposal[],stale=dirty||result?.result.revision!==clip.revision;
- useEffect(()=>{if(started&&related.find(j=>j.id===started)?.status==='succeeded'){setOpen(true);setStarted(null);setChosen([])}},[jobs,started]);
- useEffect(()=>{setChosen([]);setPreview(null)},[result?.id]);
- async function start(){setBusy(true);onError('');try{await save();const current=useVisual.getState().draft;if(!current||useVisual.getState().dirty)throw new Error('Simpan perubahan highlight terlebih dahulu.');const j=await api<Job>('/clips/'+clip.id+'/subtitle-refinement','POST',{revision:current.revision});setStarted(j.id);await onRefresh()}catch(e){onError((e as Error).message)}finally{setBusy(false)}}
- async function apply(){setBusy(true);try{if(dirty)throw new Error('Simpan perubahan dan jalankan pemeriksaan lagi sebelum menerapkan hasil.');const updated=await api<Clip>('/clips/'+clip.id+'/subtitle-refinement/apply','POST',{job_id:result!.id,revision:clip.revision,caption_ids:chosen});video.current?.pause();onApplied(updated);setOpen(false);await onRefresh()}catch(e){onError((e as Error).message)}finally{setBusy(false)}}
- function listen(p:Proposal){setPreview(p);const row=atFrame(clip.plan,p.frame);if(video.current){video.current.currentTime=(row.s.source_in+p.frame-row.start)/30;void video.current.play().catch(()=>{})}}
- return <div className="subtitle-review-actions"><button className="button secondary" disabled={busy||!!pending} onClick={start} title="Periksa ulang audio highlight dengan Whisper small"><RefreshCw size={15}/>{pending?'Memeriksa subtitle…':'Perbaiki subtitle'}</button>{result&&<button className="button secondary" onClick={()=>setOpen(true)}><CheckCheck size={15}/>Tinjau hasil</button>}<Dialog open={open} onClose={()=>{video.current?.pause();setOpen(false)}} title="Tinjau perbaikan subtitle" description="Bandingkan dengan audio asli, lalu pilih blok yang ingin diterapkan. Koreksi manual hanya diganti pada blok pilihanmu." footer={<><button className="button secondary" onClick={()=>{video.current?.pause();setOpen(false)}}>Tutup</button><button className="button primary" disabled={busy||stale||!chosen.length} onClick={apply}>Terapkan {chosen.length} blok</button></>}><div className="subtitle-review"><video ref={video} src={src} controls playsInline preload="metadata" onTimeUpdate={()=>{if(!preview||!video.current)return;const row=atFrame(clip.plan,preview.frame),end=row.s.source_in+Math.min(row.s.duration,preview.frame-row.start+120);if(video.current.currentTime>=end/30)video.current.pause()}}/>{stale&&<p className="notice"><AlertCircle size={16}/>Highlight sudah berubah. Jalankan pemeriksaan lagi sebelum menerapkan hasil.</p>}<label className="check"><input type="checkbox" checked={!!proposals.length&&chosen.length===proposals.length} onChange={e=>setChosen(e.target.checked?proposals.map(p=>p.caption_id):[])}/>Pilih semua blok</label>{!proposals.length&&<p>Tidak ada perubahan yang dapat disarankan dari audio ini.</p>}{proposals.map(p=><div className="subtitle-review-row" key={p.segment_id+p.caption_id}><label className="subtitle-review-pick"><input aria-label={'Pilih blok '+p.before} type="checkbox" checked={chosen.includes(p.caption_id)} onChange={e=>setChosen(c=>e.target.checked?[...c,p.caption_id]:c.filter(id=>id!==p.caption_id))}/></label><div><span className="muted">Teks tersimpan</span><p>{p.before}</p><span className="muted">Hasil pemeriksaan</span><p>{p.after}</p>{p.needs_review&&<small className="muted">Ada kata yang perlu didengarkan kembali.</small>}</div><button className="icon-button" title="Dengarkan bagian ini" aria-label={'Dengarkan '+p.after} onClick={()=>listen(p)}><Play size={16}/></button></div>)}</div></Dialog></div>
+import { useEffect, useRef, useState } from 'react';
+import { RefreshCw, CheckCheck, Play, AlertCircle } from 'lucide-react';
+import { api, type Job } from './api';
+import { useVisual } from './visualStore';
+import { Dialog } from './components/Ui';
+import { isPending } from './components/QueueStatus';
+import { atFrame, type Clip } from './editorModel';
+type Proposal = {
+  segment_id: string;
+  caption_id: string;
+  frame: number;
+  before: string;
+  after: string;
+  needs_review: boolean;
+};
+export function SubtitleReview({
+  clip,
+  jobs,
+  save,
+  onApplied,
+  onRefresh,
+  onError,
+  src,
+  dirty,
+}: {
+  clip: Clip;
+  jobs: Job[];
+  save: () => Promise<void>;
+  onApplied: (c: Clip) => void;
+  onRefresh: () => Promise<void>;
+  onError: (s: string) => void;
+  src: string;
+  dirty: boolean;
+}) {
+  const [open, setOpen] = useState(false),
+    [busy, setBusy] = useState(false),
+    [chosen, setChosen] = useState<string[]>([]),
+    [started, setStarted] = useState<string | null>(null),
+    [preview, setPreview] = useState<Proposal | null>(null);
+  const video = useRef<HTMLVideoElement>(null);
+  const related = jobs.filter((j) => j.kind === 'subtitle_refine' && j.clip_id === clip.id),
+    pending = related.find(isPending),
+    result = related.find((j) => j.status === 'succeeded'),
+    proposals = (result?.result.proposals || []) as Proposal[],
+    stale = dirty || result?.result.revision !== clip.revision;
+  useEffect(() => {
+    if (started && related.find((j) => j.id === started)?.status === 'succeeded') {
+      setOpen(true);
+      setStarted(null);
+      setChosen([]);
+    }
+  }, [jobs, started]);
+  useEffect(() => {
+    setChosen([]);
+    setPreview(null);
+  }, [result?.id]);
+  async function start() {
+    setBusy(true);
+    onError('');
+    try {
+      await save();
+      const current = useVisual.getState().draft;
+      if (!current || useVisual.getState().dirty)
+        throw new Error('Simpan perubahan highlight terlebih dahulu.');
+      const j = await api<Job>('/clips/' + clip.id + '/subtitle-refinement', 'POST', {
+        revision: current.revision,
+      });
+      setStarted(j.id);
+      await onRefresh();
+    } catch (e) {
+      onError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function apply() {
+    setBusy(true);
+    try {
+      if (dirty)
+        throw new Error('Simpan perubahan dan jalankan pemeriksaan lagi sebelum menerapkan hasil.');
+      const updated = await api<Clip>('/clips/' + clip.id + '/subtitle-refinement/apply', 'POST', {
+        job_id: result!.id,
+        revision: clip.revision,
+        caption_ids: chosen,
+      });
+      video.current?.pause();
+      onApplied(updated);
+      setOpen(false);
+      await onRefresh();
+    } catch (e) {
+      onError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  function listen(p: Proposal) {
+    setPreview(p);
+    const row = atFrame(clip.plan, p.frame);
+    if (video.current) {
+      video.current.currentTime = (row.s.source_in + p.frame - row.start) / 30;
+      void video.current.play().catch(() => {});
+    }
+  }
+  return (
+    <div className="subtitle-review-actions">
+      <button
+        className="button secondary"
+        disabled={busy || !!pending}
+        onClick={start}
+        title="Periksa ulang audio highlight dengan Whisper small"
+      >
+        <RefreshCw size={15} />
+        {pending ? 'Memeriksa subtitle…' : 'Perbaiki subtitle'}
+      </button>
+      {result && (
+        <button className="button secondary" onClick={() => setOpen(true)}>
+          <CheckCheck size={15} />
+          Tinjau hasil
+        </button>
+      )}
+      <Dialog
+        open={open}
+        onClose={() => {
+          video.current?.pause();
+          setOpen(false);
+        }}
+        title="Tinjau perbaikan subtitle"
+        description="Bandingkan dengan audio asli, lalu pilih blok yang ingin diterapkan. Koreksi manual hanya diganti pada blok pilihanmu."
+        footer={
+          <>
+            <button
+              className="button secondary"
+              onClick={() => {
+                video.current?.pause();
+                setOpen(false);
+              }}
+            >
+              Tutup
+            </button>
+            <button
+              className="button primary"
+              disabled={busy || stale || !chosen.length}
+              onClick={apply}
+            >
+              Terapkan {chosen.length} blok
+            </button>
+          </>
+        }
+      >
+        <div className="subtitle-review">
+          <video
+            ref={video}
+            src={src}
+            controls
+            playsInline
+            preload="metadata"
+            onTimeUpdate={() => {
+              if (!preview || !video.current) return;
+              const row = atFrame(clip.plan, preview.frame),
+                end = row.s.source_in + Math.min(row.s.duration, preview.frame - row.start + 120);
+              if (video.current.currentTime >= end / 30) video.current.pause();
+            }}
+          />
+          {stale && (
+            <p className="notice">
+              <AlertCircle size={16} />
+              Highlight sudah berubah. Jalankan pemeriksaan lagi sebelum menerapkan hasil.
+            </p>
+          )}
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={!!proposals.length && chosen.length === proposals.length}
+              onChange={(e) =>
+                setChosen(e.target.checked ? proposals.map((p) => p.caption_id) : [])
+              }
+            />
+            Pilih semua blok
+          </label>
+          {!proposals.length && <p>Tidak ada perubahan yang dapat disarankan dari audio ini.</p>}
+          {proposals.map((p) => (
+            <div className="subtitle-review-row" key={p.segment_id + p.caption_id}>
+              <label className="subtitle-review-pick">
+                <input
+                  aria-label={'Pilih blok ' + p.before}
+                  type="checkbox"
+                  checked={chosen.includes(p.caption_id)}
+                  onChange={(e) =>
+                    setChosen((c) =>
+                      e.target.checked
+                        ? [...c, p.caption_id]
+                        : c.filter((id) => id !== p.caption_id),
+                    )
+                  }
+                />
+              </label>
+              <div>
+                <span className="muted">Teks tersimpan</span>
+                <p>{p.before}</p>
+                <span className="muted">Hasil pemeriksaan</span>
+                <p>{p.after}</p>
+                {p.needs_review && (
+                  <small className="muted">Ada kata yang perlu didengarkan kembali.</small>
+                )}
+              </div>
+              <button
+                className="icon-button"
+                title="Dengarkan bagian ini"
+                aria-label={'Dengarkan ' + p.after}
+                onClick={() => listen(p)}
+              >
+                <Play size={16} />
+              </button>
+            </div>
+          ))}
+        </div>
+      </Dialog>
+    </div>
+  );
 }

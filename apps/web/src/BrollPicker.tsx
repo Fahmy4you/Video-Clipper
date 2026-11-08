@@ -1,13 +1,123 @@
-import {useEffect,useRef,useState} from 'react';
-import {createPortal} from 'react-dom';
-import {ArrowRight,Film,Search,X} from 'lucide-react';
-import {type VideoAsset,timecode} from './editorModel';
-import {SourcePicker} from './SourcePicker';
-export function BrollPicker({assets,length,assetId,sourceIn,onCancel,onUse}:{assets:VideoAsset[];length:number;assetId?:string;sourceIn?:number;onCancel:()=>void;onUse:(a:VideoAsset,start:number)=>void}){
- const [chosen,setChosen]=useState<VideoAsset|undefined>(assets.find(a=>a.id===assetId)),[q,setQ]=useState('');
- const dialog=useRef<HTMLDialogElement>(null);
- useEffect(()=>{if(!chosen)dialog.current?.showModal();return()=>dialog.current?.close()},[chosen]);
- if(chosen)return <SourcePicker asset={chosen} length={length} initial={sourceIn||0} onCancel={onCancel} onUse={a=>onUse(chosen,a)}/>;
- const available=assets.filter(a=>a.status==='ready'&&!a.archived),matches=available.filter(a=>(a.title+' '+a.hashtags.map(t=>'#'+t).join(' ')+' '+a.explain).toLowerCase().includes(q.toLowerCase()));
- return createPortal(<dialog ref={dialog} className="source-modal broll-picker-modal" onCancel={onCancel} aria-labelledby="broll-picker-title"><header><div><h2 id="broll-picker-title">Pilih video sisipan</h2><p>Durasi slot {timecode(length)}. Pilih video untuk menentukan bagian yang digunakan. Pilihan manual dapat memakai seluruh koleksi; batas instansi berlaku untuk Mix otomatis.</p></div><button onClick={onCancel} aria-label="Tutup pemilih video" title="Tutup pemilih video"><X size={18}/></button></header><div className="broll-search"><Search size={16}/><input aria-label="Cari video sisipan" value={q} onChange={e=>setQ(e.target.value)} placeholder="Cari judul, deskripsi, atau hashtag…"/></div><div className="broll-picker-list">{matches.map(a=><button className="broll-choice" key={a.id} disabled={a.frames<length} onClick={()=>setChosen(a)}><img src={a.thumbnail_url} alt=""/><div><span className="source-owner-label">{a.scope==='global'?'Global':a.instansi_names.join(' · ')||'Instansi'}</span><strong>{a.title}</strong><p>{a.explain}</p><span className="broll-tags">{a.hashtags.slice(0,3).map(tag=><span key={tag}>#{tag}</span>)}{a.hashtags.length>3&&<span>+{a.hashtags.length-3}</span>}</span><small>{a.frames<length?'Terlalu pendek untuk slot':timecode(a.frames)}</small></div><span className="broll-choice-duration">{a.frames>=length&&<ArrowRight size={18}/>}</span></button>)}{!matches.length&&<div className="broll-empty"><Film size={28}/><strong>{available.length?'Video tidak ditemukan':'Belum ada video siap pakai'}</strong><p>{available.length?'Coba judul atau hashtag lain.':'Tambahkan footage melalui halaman Koleksi video, lalu tunggu pemrosesan selesai.'}</p></div>}</div><footer><span>Video sisipan menggunakan audio podcast yang sedang diedit.</span><button onClick={onCancel}>Batal</button></footer></dialog>,document.body)
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { ArrowRight, Film, Search, X } from 'lucide-react';
+import { type VideoAsset, timecode } from './editorModel';
+import { SourcePicker } from './SourcePicker';
+export function BrollPicker({
+  assets,
+  length,
+  assetId,
+  sourceIn,
+  onCancel,
+  onUse,
+}: {
+  assets: VideoAsset[];
+  length: number;
+  assetId?: string;
+  sourceIn?: number;
+  onCancel: () => void;
+  onUse: (a: VideoAsset, start: number) => void;
+}) {
+  const [chosen, setChosen] = useState<VideoAsset | undefined>(
+      assets.find((a) => a.id === assetId),
+    ),
+    [q, setQ] = useState('');
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (!chosen) dialog.current?.showModal();
+    return () => dialog.current?.close();
+  }, [chosen]);
+  if (chosen)
+    return (
+      <SourcePicker
+        asset={chosen}
+        length={length}
+        initial={sourceIn || 0}
+        onCancel={onCancel}
+        onUse={(a) => onUse(chosen, a)}
+      />
+    );
+  const available = assets.filter((a) => a.status === 'ready' && !a.archived),
+    matches = available.filter((a) =>
+      (a.title + ' ' + a.hashtags.map((t) => '#' + t).join(' ') + ' ' + a.explain)
+        .toLowerCase()
+        .includes(q.toLowerCase()),
+    );
+  return createPortal(
+    <dialog
+      ref={dialog}
+      className="source-modal broll-picker-modal"
+      onCancel={onCancel}
+      aria-labelledby="broll-picker-title"
+    >
+      <header>
+        <div>
+          <h2 id="broll-picker-title">Pilih video sisipan</h2>
+          <p>
+            Durasi slot {timecode(length)}. Pilih video untuk menentukan bagian yang digunakan.
+            Pilihan manual dapat memakai seluruh koleksi; batas instansi berlaku untuk Mix otomatis.
+          </p>
+        </div>
+        <button onClick={onCancel} aria-label="Tutup pemilih video" title="Tutup pemilih video">
+          <X size={18} />
+        </button>
+      </header>
+      <div className="broll-search">
+        <Search size={16} />
+        <input
+          aria-label="Cari video sisipan"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Cari judul, deskripsi, atau hashtag…"
+        />
+      </div>
+      <div className="broll-picker-list">
+        {matches.map((a) => (
+          <button
+            className="broll-choice"
+            key={a.id}
+            disabled={a.frames < length}
+            onClick={() => setChosen(a)}
+          >
+            <img src={a.thumbnail_url} alt="" />
+            <div>
+              <span className="source-owner-label">
+                {a.scope === 'global' ? 'Global' : a.instansi_names.join(' · ') || 'Instansi'}
+              </span>
+              <strong>{a.title}</strong>
+              <p>{a.explain}</p>
+              <span className="broll-tags">
+                {a.hashtags.slice(0, 3).map((tag) => (
+                  <span key={tag}>#{tag}</span>
+                ))}
+                {a.hashtags.length > 3 && <span>+{a.hashtags.length - 3}</span>}
+              </span>
+              <small>{a.frames < length ? 'Terlalu pendek untuk slot' : timecode(a.frames)}</small>
+            </div>
+            <span className="broll-choice-duration">
+              {a.frames >= length && <ArrowRight size={18} />}
+            </span>
+          </button>
+        ))}
+        {!matches.length && (
+          <div className="broll-empty">
+            <Film size={28} />
+            <strong>
+              {available.length ? 'Video tidak ditemukan' : 'Belum ada video siap pakai'}
+            </strong>
+            <p>
+              {available.length
+                ? 'Coba judul atau hashtag lain.'
+                : 'Tambahkan footage melalui halaman Koleksi video, lalu tunggu pemrosesan selesai.'}
+            </p>
+          </div>
+        )}
+      </div>
+      <footer>
+        <span>Video sisipan menggunakan audio podcast yang sedang diedit.</span>
+        <button onClick={onCancel}>Batal</button>
+      </footer>
+    </dialog>,
+    document.body,
+  );
 }

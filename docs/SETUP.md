@@ -30,7 +30,7 @@ Isi `.env` menggunakan host Windows aktual:
 ```dotenv
 DATABASE_URL=postgresql+psycopg://video_clipping:PASSWORD_URL_ENCODED@172.20.240.1:5432/video_clipping
 REDIS_URL=redis://127.0.0.1:6381/0
-WHISPER_MODEL=base
+WHISPER_PROFILE=standard
 WHISPER_THREADS=2
 ```
 
@@ -38,31 +38,14 @@ Password dalam URL harus percent-encoded jika mengandung @, :, /, #, atau karakt
 Launcher menjalankan Alembic sebelum API bila DATABASE_URL terisi. Untuk migrasi manual:
 `.venv/bin/python -m alembic -c backend/alembic.ini upgrade head`
 
-## 3. Gemini
+## 3. 9Router
 
-Buka Pengaturan → Koneksi Gemini untuk menambah maksimal lima API key. Key disimpan di
-`apikey.json` pada root proyek, sejajar `.env`. File asli diabaikan Git; `apikey.json.example`
-berisi template kosong. Konfigurasi dibaca ulang tanpa restart.
+Jalankan 9Router, buat API key pada dashboardnya, dan siapkan combo yang akan digunakan.
+Isi 9router_base_url dan 9router_key pada .env. Base URL diakhiri /v1.
+Lihat [panduan 9Router dan WSL](QUEUE_AND_ROUTER.md) untuk alamat Windows dari backend WSL.
 
-Untuk mengisi manual, gunakan format berikut di apikey.json (ganti nilai contoh dengan key sendiri):
-
-```json
-{"version":1,"connections":[{"id":"utama","name":"Utama","key":"ISI_KEY_SENDIRI","priority":1}]}
-```
-
-Setiap koneksi harus memiliki ID unik dan prioritas unik 1–5. Saat menyalin contoh manual, ubah ID juga.
-Penambahan lewat Pengaturan membuat ID secara otomatis.
-
-Key lengkap hanya dikirim saat pengguna menyimpan melalui dialog, tidak ditampilkan kembali melalui API.
-File asli, lock, dan sementara tidak boleh dimasukkan ke Git. Jangan menaruhnya di folder public.
-Pada pemakaian pertama, key lama dari .env dimigrasikan satu kali bila apikey.json belum ada;
-setelah itu key Gemini di .env diabaikan. File kosong yang valid berarti tidak ada koneksi.
-JSON rusak perlu diperbaiki; aplikasi tidak kembali ke key lama secara diam-diam.
-
-Pilih model dari dropdown saat membuat proyek. Snapshot pekerjaan mempertahankan model;
-key cadangan hanya digunakan bila mendukung model yang sama. Tambah/ganti/hapus, urutan prioritas,
-dan uji koneksi tersedia di Pengaturan. Database tetap memakai .env dan perubahan database memerlukan restart.
-Panggilan Gemini memakai kuota akun sendiri dan mengirim teks transkrip.
+Buka Pengaturan lalu Periksa koneksi. Pemeriksaan hanya membaca metadata.
+Pemakaian model dan fallback dikelola 9Router. Audio ditranskripsikan lokal dengan Whisper.
 
 ## 4. Menjalankan
 
@@ -119,3 +102,25 @@ Lihat docs/LONG_VIDEO_RECOVERY.md untuk diagnosis dan catatan pengujian terbaru.
 ## Daftar model tanpa prompt uji
 
 Pengaturan menyediakan **Periksa katalog**, yang hanya membaca metadata Google. Cache bertahan 24 jam dan setelah restart. Dropdown dapat menampilkan model yang belum pernah dipakai; katalog tidak menjamin akses generate atau sisa kuota. Lihat [MODEL_CATALOG.md](MODEL_CATALOG.md).
+
+
+## Profil Whisper lokal
+
+Setel `WHISPER_PROFILE=standard` untuk profil Standar (model multilingual
+`small`), atau `WHISPER_PROFILE=light` untuk Ringan (model multilingual
+`base`). Profil berlaku pada transkripsi awal dan perbaikan subtitle.
+Tanpa konfigurasi, profil Standar digunakan. `WHISPER_THREADS` tetap 2
+secara default; pemrosesan CPU INT8, bagian 120 detik dan pengawasan RAM
+tetap berlaku. Model tidak diturunkan otomatis ketika pekerjaan gagal.
+
+Restart backend dan worker setelah mengganti profil. Model yang sudah
+diunduh tetap disimpan di `storage/models`; mengganti profil tidak
+menghapusnya. Key lama `WHISPER_MODEL=base|small` masih diterima ketika
+`WHISPER_PROFILE` belum diisi; profil eksplisit selalu diutamakan.
+Template hanya berisi nama key dengan nilai kosong.
+
+Transkrip lengkap yang sudah tersimpan tetap digunakan dan tidak ditulis ulang
+hanya karena profil berubah. Perbandingan model harus memakai keluaran proyek
+terpisah atau proses transkripsi ulang yang disengaja. Checkpoint bagian
+menyertakan nama model, sehingga hasil bagian dari model berbeda tidak dicampur.
+Metadata transkrip baru mencatat profil, model, waktu proses, dan puncak RAM.

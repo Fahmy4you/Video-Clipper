@@ -1,20 +1,282 @@
-import {useEffect,useMemo,useState} from 'react';
-import {Building2,Plus,Search,Pencil,Trash2,LoaderCircle,AlertCircle,Check,X} from 'lucide-react';
-import {api} from './api';
-import {type Instansi} from './components/SourceOwnership';
-import {ActionMenu,ActionItem,Dialog,Pagination,useConfirm} from './components/Ui';
-import {FilterDock,SortSelect} from './components/ListFilters';
-import {compareNames} from './listFilters';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  Building2,
+  Plus,
+  Search,
+  Pencil,
+  Trash2,
+  LoaderCircle,
+  AlertCircle,
+  Check,
+  X,
+} from 'lucide-react';
+import { api } from './api';
+import { type Instansi } from './components/SourceOwnership';
+import { ActionMenu, ActionItem, Dialog, Pagination, useConfirm } from './components/Ui';
+import { FilterDock, SortSelect } from './components/ListFilters';
+import { compareNames } from './listFilters';
 import './management.css';
-export function InstansiPage(){
- const confirm=useConfirm(),[items,setItems]=useState<Instansi[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[busy,setBusy]=useState(false),[open,setOpen]=useState(false),[editing,setEditing]=useState<Instansi|null>(null),[name,setName]=useState(''),[query,setQuery]=useState(''),[page,setPage]=useState(1);
- const [sort,setSort]=useState('name');
- const sortOptions=[{value:'name',label:'Nama · A–Z'},{value:'video-desc',label:'Jumlah video · terbanyak'},{value:'video-asc',label:'Jumlah video · tersedikit'},{value:'project-desc',label:'Jumlah proyek · terbanyak'},{value:'project-asc',label:'Jumlah proyek · tersedikit'}];
- async function refresh(){setItems(await api<Instansi[]>('/instansi'))}
- useEffect(()=>{void refresh().catch(e=>setError(e.message)).finally(()=>setLoading(false))},[]);
- const filtered=useMemo(()=>items.filter(i=>i.name.toLocaleLowerCase('id').includes(query.trim().toLocaleLowerCase('id'))).sort((a,b)=>(sort==='name'?0:((sort.startsWith('project')?a.project_count:a.video_count)-(sort.startsWith('project')?b.project_count:b.video_count))*(sort.endsWith('asc')?1:-1))||compareNames(a.name,b.name)||a.id.localeCompare(b.id)),[items,query,sort]),current=Math.min(page,Math.max(1,Math.ceil(filtered.length/25))),rows=filtered.slice((current-1)*25,current*25);
- function edit(item:Instansi|null){setEditing(item);setName(item?.name||'');setError('');setOpen(true)}
- async function save(){setBusy(true);setError('');try{await api(editing?'/instansi/'+editing.id:'/instansi',editing?'PATCH':'POST',{name});await refresh();setOpen(false)}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
- async function remove(item:Instansi){if(!await confirm({title:'Hapus instansi '+item.name+'?',description:'Instansi hanya dapat dihapus jika tidak dipakai video atau proyek. Video tidak akan dihapus atau dijadikan Global.',confirmLabel:'Hapus instansi',danger:true}))return;setBusy(true);setError('');try{await api('/instansi/'+item.id,'DELETE');await refresh()}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
- return <main className="mg-page"><header className="mg-page-header selection-page-header"><div><h1>Instansi</h1><p>Kelola pemilik video dan sumber kolaborasi proyek Mix.</p></div><div className="page-header-actions"><button className="primary" disabled={busy} onClick={()=>edit(null)}><Plus size={17}/>Instansi</button></div></header>{error&&!open&&<p className="notice" role="alert"><AlertCircle size={17}/>{error}</p>}<section className="mg-table-panel" aria-label="Daftar instansi"><div className="mg-table-toolbar"><div className="mg-search"><Search size={17}/><input aria-label="Cari instansi" placeholder="Cari instansi…" value={query} onChange={e=>{setQuery(e.target.value);setPage(1)}}/>{query&&<button aria-label="Hapus pencarian" onClick={()=>{setQuery('');setPage(1)}}><X size={16}/></button>}</div><span>{filtered.length} instansi</span></div><FilterDock active={sort!=='name'} summary={sortOptions.find(o=>o.value===sort)?.label||''} onReset={()=>{setSort('name');setPage(1)}}><SortSelect value={sort} onChange={v=>{setSort(v);setPage(1)}} options={sortOptions}/></FilterDock>{loading?<div className="mg-empty" role="status"><LoaderCircle size={25} className="spin"/><p>Memuat instansi…</p></div>:rows.length?<><table className="mg-tag-table instansi-table"><thead><tr><th scope="col">Nama instansi</th><th scope="col">Video</th><th scope="col">Proyek</th><th scope="col"><span className="sr-only">Aksi</span></th></tr></thead><tbody>{rows.map(item=><tr key={item.id}><td><span className="mg-tag-name"><Building2 size={16}/><span>{item.name}</span></span></td><td>{item.video_count}</td><td>{item.project_count}</td><td><ActionMenu label={'Aksi instansi '+item.name}><ActionItem disabled={busy} onClick={()=>edit(item)}><Pencil size={16}/>Ubah nama</ActionItem><ActionItem disabled={busy} danger onClick={()=>void remove(item)}><Trash2 size={16}/>Hapus instansi</ActionItem></ActionMenu></td></tr>)}</tbody></table><Pagination page={current} total={filtered.length} onChange={setPage}/></>:<div className="mg-empty"><Building2 size={28}/><h2>{query?'Instansi tidak ditemukan':'Belum ada instansi'}</h2><p>{query?'Coba kata pencarian lain.':'Tambahkan instansi untuk mengelompokkan koleksi video.'}</p></div>}</section><p className="mg-page-note"><Building2 size={15}/>Global adalah lingkup penggunaan video. Global tidak perlu dibuat sebagai instansi.</p><Dialog open={open} onClose={()=>{if(!busy)setOpen(false)}} title={editing?'Ubah nama instansi':'Tambah instansi'} footer={<><button className="button secondary" disabled={busy} onClick={()=>setOpen(false)}>Batal</button><button className="primary" form="instansi-form" disabled={busy||!name.trim()}>{busy?<LoaderCircle size={16} className="spin"/>:<Check size={16}/>}Simpan</button></>}><form id="instansi-form" className="mg-dialog-form" onSubmit={e=>{e.preventDefault();void save()}}><label>Nama instansi<input autoFocus aria-label="Nama instansi" required maxLength={100} value={name} placeholder="Contoh: Cryptowave" onChange={e=>setName(e.target.value)}/></label>{error&&<p className="mg-form-error" role="alert">{error}</p>}</form></Dialog></main>
+export function InstansiPage() {
+  const confirm = useConfirm(),
+    [items, setItems] = useState<Instansi[]>([]),
+    [loading, setLoading] = useState(true),
+    [error, setError] = useState(''),
+    [busy, setBusy] = useState(false),
+    [open, setOpen] = useState(false),
+    [editing, setEditing] = useState<Instansi | null>(null),
+    [name, setName] = useState(''),
+    [query, setQuery] = useState(''),
+    [page, setPage] = useState(1);
+  const [sort, setSort] = useState('name');
+  const sortOptions = [
+    { value: 'name', label: 'Nama · A–Z' },
+    { value: 'video-desc', label: 'Jumlah video · terbanyak' },
+    { value: 'video-asc', label: 'Jumlah video · tersedikit' },
+    { value: 'project-desc', label: 'Jumlah proyek · terbanyak' },
+    { value: 'project-asc', label: 'Jumlah proyek · tersedikit' },
+  ];
+  async function refresh() {
+    setItems(await api<Instansi[]>('/instansi'));
+  }
+  useEffect(() => {
+    void refresh()
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+  const filtered = useMemo(
+      () =>
+        items
+          .filter((i) =>
+            i.name.toLocaleLowerCase('id').includes(query.trim().toLocaleLowerCase('id')),
+          )
+          .sort(
+            (a, b) =>
+              (sort === 'name'
+                ? 0
+                : ((sort.startsWith('project') ? a.project_count : a.video_count) -
+                    (sort.startsWith('project') ? b.project_count : b.video_count)) *
+                  (sort.endsWith('asc') ? 1 : -1)) ||
+              compareNames(a.name, b.name) ||
+              a.id.localeCompare(b.id),
+          ),
+      [items, query, sort],
+    ),
+    current = Math.min(page, Math.max(1, Math.ceil(filtered.length / 25))),
+    rows = filtered.slice((current - 1) * 25, current * 25);
+  function edit(item: Instansi | null) {
+    setEditing(item);
+    setName(item?.name || '');
+    setError('');
+    setOpen(true);
+  }
+  async function save() {
+    setBusy(true);
+    setError('');
+    try {
+      await api(editing ? '/instansi/' + editing.id : '/instansi', editing ? 'PATCH' : 'POST', {
+        name,
+      });
+      await refresh();
+      setOpen(false);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function remove(item: Instansi) {
+    if (
+      !(await confirm({
+        title: 'Hapus instansi ' + item.name + '?',
+        description:
+          'Instansi hanya dapat dihapus jika tidak dipakai video atau proyek. Video tidak akan dihapus atau dijadikan Global.',
+        confirmLabel: 'Hapus instansi',
+        danger: true,
+      }))
+    )
+      return;
+    setBusy(true);
+    setError('');
+    try {
+      await api('/instansi/' + item.id, 'DELETE');
+      await refresh();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <main className="mg-page">
+      <header className="mg-page-header selection-page-header">
+        <div>
+          <h1>Instansi</h1>
+          <p>Kelola pemilik video dan sumber kolaborasi proyek Mix.</p>
+        </div>
+        <div className="page-header-actions">
+          <button className="primary" disabled={busy} onClick={() => edit(null)}>
+            <Plus size={17} />
+            Instansi
+          </button>
+        </div>
+      </header>
+      {error && !open && (
+        <p className="notice" role="alert">
+          <AlertCircle size={17} />
+          {error}
+        </p>
+      )}
+      <section className="mg-table-panel" aria-label="Daftar instansi">
+        <div className="mg-table-toolbar">
+          <div className="mg-search">
+            <Search size={17} />
+            <input
+              aria-label="Cari instansi"
+              placeholder="Cari instansi…"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setPage(1);
+              }}
+            />
+            {query && (
+              <button
+                aria-label="Hapus pencarian"
+                onClick={() => {
+                  setQuery('');
+                  setPage(1);
+                }}
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
+          <span>{filtered.length} instansi</span>
+        </div>
+        <FilterDock
+          active={sort !== 'name'}
+          summary={sortOptions.find((o) => o.value === sort)?.label || ''}
+          onReset={() => {
+            setSort('name');
+            setPage(1);
+          }}
+        >
+          <SortSelect
+            value={sort}
+            onChange={(v) => {
+              setSort(v);
+              setPage(1);
+            }}
+            options={sortOptions}
+          />
+        </FilterDock>
+        {loading ? (
+          <div className="mg-empty" role="status">
+            <LoaderCircle size={25} className="spin" />
+            <p>Memuat instansi…</p>
+          </div>
+        ) : rows.length ? (
+          <>
+            <table className="mg-tag-table instansi-table">
+              <thead>
+                <tr>
+                  <th scope="col">Nama instansi</th>
+                  <th scope="col">Video</th>
+                  <th scope="col">Proyek</th>
+                  <th scope="col">
+                    <span className="sr-only">Aksi</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((item) => (
+                  <tr key={item.id}>
+                    <td>
+                      <span className="mg-tag-name">
+                        <Building2 size={16} />
+                        <span>{item.name}</span>
+                      </span>
+                    </td>
+                    <td>{item.video_count}</td>
+                    <td>{item.project_count}</td>
+                    <td>
+                      <ActionMenu label={'Aksi instansi ' + item.name}>
+                        <ActionItem disabled={busy} onClick={() => edit(item)}>
+                          <Pencil size={16} />
+                          Ubah nama
+                        </ActionItem>
+                        <ActionItem disabled={busy} danger onClick={() => void remove(item)}>
+                          <Trash2 size={16} />
+                          Hapus instansi
+                        </ActionItem>
+                      </ActionMenu>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <Pagination page={current} total={filtered.length} onChange={setPage} />
+          </>
+        ) : (
+          <div className="mg-empty">
+            <Building2 size={28} />
+            <h2>{query ? 'Instansi tidak ditemukan' : 'Belum ada instansi'}</h2>
+            <p>
+              {query
+                ? 'Coba kata pencarian lain.'
+                : 'Tambahkan instansi untuk mengelompokkan koleksi video.'}
+            </p>
+          </div>
+        )}
+      </section>
+      <p className="mg-page-note">
+        <Building2 size={15} />
+        Global adalah lingkup penggunaan video. Global tidak perlu dibuat sebagai instansi.
+      </p>
+      <Dialog
+        open={open}
+        onClose={() => {
+          if (!busy) setOpen(false);
+        }}
+        title={editing ? 'Ubah nama instansi' : 'Tambah instansi'}
+        footer={
+          <>
+            <button className="button secondary" disabled={busy} onClick={() => setOpen(false)}>
+              Batal
+            </button>
+            <button className="primary" form="instansi-form" disabled={busy || !name.trim()}>
+              {busy ? <LoaderCircle size={16} className="spin" /> : <Check size={16} />}Simpan
+            </button>
+          </>
+        }
+      >
+        <form
+          id="instansi-form"
+          className="mg-dialog-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save();
+          }}
+        >
+          <label>
+            Nama instansi
+            <input
+              autoFocus
+              aria-label="Nama instansi"
+              required
+              maxLength={100}
+              value={name}
+              placeholder="Contoh: Cryptowave"
+              onChange={(e) => setName(e.target.value)}
+            />
+          </label>
+          {error && (
+            <p className="mg-form-error" role="alert">
+              {error}
+            </p>
+          )}
+        </form>
+      </Dialog>
+    </main>
+  );
 }

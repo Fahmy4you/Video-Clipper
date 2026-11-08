@@ -1,86 +1,976 @@
-import {ReviewHighlights} from './ReviewHighlights';
-import {sourceRanges,rangeLabel,exclusionPrompt} from './sourceRanges';
-import {useEffect,useRef,useState} from 'react';
-import {Link,useParams,useLocation} from 'react-router-dom';
-import {ArrowLeft,ArrowRight,Plus,Film,Loader2,Trash2,Copy,Pencil,RefreshCw,Clock3,CheckCircle2,AlertCircle,Layers,CalendarDays,SlidersHorizontal,X} from 'lucide-react';
-import {api,stamp,type Job} from './api';
-import {blankPlan,total,type Project,type Clip,type SourceWord} from './editorModel';
-import {Button} from './components/ui/button';
-import {ModelSelect} from './components/ModelSelect';
-import {ActionMenu,ActionItem,Dialog,useConfirm} from './components/Ui';
-import {BulkBar,SelectionToggle,SelectCheckbox,useBulkSelection,deleteSelected,deletionMessage} from './components/BulkSelection';
-import {FilterDock,SortSelect,DateRange} from './components/ListFilters';
-import {inDateRange,compareDates,compareNames} from './listFilters';
-import {QueueOverview,JobMetrics,WaitingDetails,isPending,jobLabel,kindLabel} from './components/QueueStatus';
+import { ProposalSearch, RouterRecoveryList } from './ProposalSearch';
+import { ReviewHighlights } from './ReviewHighlights';
+import { sourceRanges, rangeLabel, exclusionPrompt } from './sourceRanges';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useParams, useLocation } from 'react-router-dom';
+import {
+  ArrowLeft,
+  ArrowRight,
+  Plus,
+  Film,
+  Loader2,
+  Trash2,
+  Copy,
+  Pencil,
+  RefreshCw,
+  Clock3,
+  CheckCircle2,
+  AlertCircle,
+  Layers,
+  CalendarDays,
+  SlidersHorizontal,
+  X,
+} from 'lucide-react';
+import { api, stamp, type Job } from './api';
+import { blankPlan, total, type Project, type Clip, type SourceWord } from './editorModel';
+import { Button } from './components/ui/button';
+import { ModelSelect } from './components/ModelSelect';
+import { ActionMenu, ActionItem, Dialog, useConfirm } from './components/Ui';
+import {
+  BulkBar,
+  SelectionToggle,
+  SelectCheckbox,
+  useBulkSelection,
+  deleteSelected,
+  deletionMessage,
+} from './components/BulkSelection';
+import { FilterDock, SortSelect, DateRange } from './components/ListFilters';
+import { inDateRange, compareDates, compareNames } from './listFilters';
+import {
+  QueueOverview,
+  JobMetrics,
+  WaitingDetails,
+  isPending,
+  jobLabel,
+  kindLabel,
+} from './components/QueueStatus';
 import './management.css';
 
-function Progress({jobs}:{jobs:Job[]}) {
-  const job=jobs.find(j=>j.status==='running'||j.status==='cancelling')||jobs.find(j=>isPending(j))||jobs.find(j=>j.kind==='analysis');
-  if(!job)return <span className="mg-status"><Clock3 size={15}/>Belum diproses</span>;
-  const processing=job.status==='running';
-  const label=jobLabel(job);
-  return <div className={'mg-progress '+job.status} role="status"><span>{processing?<Loader2 size={15} className="spin"/>:job.status==='succeeded'?<CheckCircle2 size={15}/>:isPending(job)?<Clock3 size={15}/>:<AlertCircle size={15}/>}<span>{kindLabel(job.kind)} · {label}</span>{job.status==='running'&&<small>{job.progress}%</small>}</span>{job.status==='running'&&<progress aria-label={label} value={job.progress} max={100}/>}<JobMetrics job={job}/></div>;
+function Progress({ jobs }: { jobs: Job[] }) {
+  const job =
+    jobs.find((j) => j.status === 'running' || j.status === 'cancelling') ||
+    jobs.find((j) => isPending(j)) ||
+    jobs.find((j) => j.kind === 'analysis');
+  if (!job)
+    return (
+      <span className="mg-status">
+        <Clock3 size={15} />
+        Belum diproses
+      </span>
+    );
+  const processing = job.status === 'running';
+  const label = jobLabel(job);
+  return (
+    <div className={'mg-progress ' + job.status} role="status">
+      <span>
+        {processing ? (
+          <Loader2 size={15} className="spin" />
+        ) : job.status === 'succeeded' ? (
+          <CheckCircle2 size={15} />
+        ) : isPending(job) ? (
+          <Clock3 size={15} />
+        ) : (
+          <AlertCircle size={15} />
+        )}
+        <span>
+          {kindLabel(job.kind)} · {label}
+        </span>
+        {job.status === 'running' && <small>{job.progress}%</small>}
+      </span>
+      {job.status === 'running' && <progress aria-label={label} value={job.progress} max={100} />}
+      <JobMetrics job={job} />
+    </div>
+  );
 }
 
-export function ProjectsPage() {
-  const location=useLocation(),confirm=useConfirm();
-  const [projects,setProjects]=useState<Project[]>([]),[jobs,setJobs]=useState<Record<string,Job[]>>({}),[error,setError]=useState(location.state?.error||''),[loading,setLoading]=useState(true);
-  const selection=useBulkSelection(projects.map(p=>p.id)),[deleting,setDeleting]=useState(false),[progress,setProgress]=useState(0),[result,setResult]=useState('');
-  const [query,setQuery]=useState(''),[sort,setSort]=useState('created-desc'),[createdFrom,setCreatedFrom]=useState(''),[createdTo,setCreatedTo]=useState(''),[updatedFrom,setUpdatedFrom]=useState(''),[updatedTo,setUpdatedTo]=useState('');
-  const sortOptions=[{value:'created-desc',label:'Tanggal dibuat · terbaru'},{value:'created-asc',label:'Tanggal dibuat · terlama'},{value:'updated-desc',label:'Terakhir diperbarui · terbaru'},{value:'updated-asc',label:'Terakhir diperbarui · terlama'}];
-  const filterActive=!!(query||createdFrom||createdTo||updatedFrom||updatedTo)||sort!=='created-desc';
-  function resetFilters(){setQuery('');setSort('created-desc');setCreatedFrom('');setCreatedTo('');setUpdatedFrom('');setUpdatedTo('')}
-  const filtered=projects.filter(p=>p.title.toLocaleLowerCase('id').includes(query.trim().toLocaleLowerCase('id'))&&inDateRange(p.created_at,createdFrom,createdTo)&&inDateRange(p.updated_at,updatedFrom,updatedTo)).sort((a,b)=>compareDates(sort.startsWith('updated')?a.updated_at:a.created_at,sort.startsWith('updated')?b.updated_at:b.created_at,sort.endsWith('asc'))||compareNames(a.title,b.title)||a.id.localeCompare(b.id));
-  const eligible=projects.filter(p=>!(jobs[p.id]||[]).some(j=>isPending(j))).map(p=>p.id);
-  const visibleEligible=filtered.filter(p=>eligible.includes(p.id)).map(p=>p.id);
-  const blocked=[...selection.selected].some(id=>!eligible.includes(id));
-  async function removeProjects(ids:string[]){if(!ids.length||deleting)return;if(!await confirm({title:'Hapus '+ids.length+' proyek?',description:'Proyek terpilih, seluruh highlight, video sumber, aset proyek, preview, dan hasil ekspornya akan dihapus permanen. Koleksi video sisipan bersama tetap tersedia.',confirmLabel:'Hapus proyek',danger:true}))return;setDeleting(true);setProgress(0);setError('');setResult('');try{const outcome=await deleteSelected(ids,id=>'/projects/'+id,setProgress);setProjects(rows=>rows.filter(p=>!outcome.deleted.includes(p.id)));selection.remove(outcome.deleted);setResult(deletionMessage(outcome))}finally{setDeleting(false)}}
-  useEffect(()=>{let live=true;async function refresh(){try{const p=await api<Project[]>('/projects');const j=await Promise.all(p.map(async item=>[item.id,await api<Job[]>('/projects/'+item.id+'/jobs')] as const));if(live){setProjects(p);setJobs(Object.fromEntries(j))}}catch(e){if(live)setError((e as Error).message)}finally{if(live)setLoading(false)}}void refresh();const timer=setInterval(refresh,2500);return()=>{live=false;clearInterval(timer)}},[]);
-  return <main className="mg-page mg-projects-page">
-    <header className="mg-page-header selection-page-header"><div><h1>Proyek</h1><p>Ikuti proses video dan pilih highlight untuk diedit.</p></div><div className="page-header-actions"><SelectionToggle active={selection.selecting} onToggle={selection.toggleMode} disabled={loading||deleting||(!selection.selecting&&!projects.length)}/><Button asChild><Link to="/"><Plus size={17}/>Highlight</Link></Button></div></header>
-    {result&&<p className="bulk-result" role="status">{result}</p>}
-    {error&&<p className="notice" role="alert"><AlertCircle size={17}/>{error}</p>}
-    <QueueOverview/><FilterDock active={filterActive} summary={`${filtered.length} dari ${projects.length} proyek · ${sortOptions.find(o=>o.value===sort)?.label}`} onReset={resetFilters}><label>Nama proyek<input type="search" aria-label="Cari nama proyek" placeholder="Cari nama proyek…" value={query} onChange={e=>setQuery(e.target.value)}/></label><SortSelect value={sort} onChange={setSort} options={sortOptions}/><DateRange label="Tanggal dibuat" from={createdFrom} to={createdTo} onChange={(a,b)=>{setCreatedFrom(a);setCreatedTo(b)}}/><DateRange label="Terakhir diperbarui" from={updatedFrom} to={updatedTo} onChange={(a,b)=>{setUpdatedFrom(a);setUpdatedTo(b)}}/><p className="filter-help filter-full">Rentang tanggal mengikuti waktu lokal perangkat. Diperbarui saat proyek atau highlight berubah; data lama memakai tanggal dibuat hingga perubahan berikutnya.</p></FilterDock>
-    {loading?<div className="mg-empty" role="status"><Loader2 className="spin" size={28}/><p>Memuat proyek…</p></div>:!projects.length?<div className="mg-empty"><span className="mg-empty-icon"><Film size={26}/></span><h2>Belum ada proyek</h2><p>Tempel link YouTube di dashboard untuk membuat highlight pertama.</p><Button asChild><Link to="/"><Plus size={16}/>Proyek</Link></Button></div>:<>
-      {selection.selecting&&<BulkBar selected={selection.selected} visibleIds={visibleEligible} onTogglePage={()=>selection.togglePage(visibleEligible)} onClear={selection.clear} onDelete={()=>void removeProjects([...selection.selected])} disabled={blocked} deleting={deleting} progress={progress} scope="proyek yang siap"/>}
-      <div className="mg-list-heading"><span>{filtered.length} proyek</span><span>Progres diperbarui otomatis</span></div>
-      {!filtered.length&&<div className="mg-empty filter-empty"><h2>Proyek tidak ditemukan</h2><p>Coba kata pencarian atau rentang tanggal lain.</p><button type="button" className="button secondary" onClick={resetFilters}>Reset filter</button></div>}<div className="mg-project-list">{filtered.map(p=><div className={'mg-project-entry '+(selection.selected.has(p.id)?'is-selected':'')} key={p.id}>{selection.selecting&&<SelectCheckbox label={'Pilih proyek '+p.title} checked={selection.selected.has(p.id)} disabled={deleting||!eligible.includes(p.id)} onChange={()=>selection.toggle(p.id)}/>}<Link className="mg-project-row" to={'/projects/'+p.id} key={p.id}><span className="mg-project-icon"><Film size={22}/></span><div className="mg-project-info"><h2 title={p.title}>{p.title}</h2><div className="mg-meta"><span>{p.workflow==='review'?'Tinjau dahulu':p.aspect_ratio}</span><span><Layers size={13}/>{p.highlight_count} highlight AI</span><span><Clock3 size={13}/>{p.duration?stamp(p.duration):'Menyiapkan sumber'}</span><span className="project-date" title={new Date(p.created_at).toLocaleString('id-ID')}><CalendarDays size={13}/>Dibuat {new Date(p.created_at).toLocaleDateString('id-ID')}</span><span className="project-date" title={new Date(p.updated_at).toLocaleString('id-ID')}>Diperbarui {new Date(p.updated_at).toLocaleDateString('id-ID')}</span></div></div>{p.workflow==='review'&&p.review_counts&&<small>{p.review_counts.review} menunggu persetujuan · {p.review_counts.processing} diproses · {p.review_counts.ready} siap diedit</small>}<Progress jobs={jobs[p.id]||[]}/><ArrowRight className="mg-row-arrow" size={18}/></Link><ActionMenu label={'Aksi proyek '+p.title}><ActionItem danger disabled={deleting||!eligible.includes(p.id)} onClick={()=>void removeProjects([p.id])}><Trash2 size={16}/>Hapus proyek</ActionItem></ActionMenu></div>)}</div>
-    </>}
-  </main>;
+export function ProjectsPage({ view = 'video' }: { view?: 'video' | 'transcription' }) {
+  const base = view === 'transcription' ? '/transcriptions' : '/projects';
+  const location = useLocation(),
+    confirm = useConfirm();
+  const [projects, setProjects] = useState<Project[]>([]),
+    [jobs, setJobs] = useState<Record<string, Job[]>>({}),
+    [error, setError] = useState(location.state?.error || ''),
+    [loading, setLoading] = useState(true);
+  const selection = useBulkSelection(projects.map((p) => p.id)),
+    [deleting, setDeleting] = useState(false),
+    [progress, setProgress] = useState(0),
+    [result, setResult] = useState('');
+  const [query, setQuery] = useState(''),
+    [sort, setSort] = useState('created-desc'),
+    [createdFrom, setCreatedFrom] = useState(''),
+    [createdTo, setCreatedTo] = useState(''),
+    [updatedFrom, setUpdatedFrom] = useState(''),
+    [updatedTo, setUpdatedTo] = useState('');
+  const sortOptions = [
+    { value: 'created-desc', label: 'Tanggal dibuat · terbaru' },
+    { value: 'created-asc', label: 'Tanggal dibuat · terlama' },
+    { value: 'updated-desc', label: 'Terakhir diperbarui · terbaru' },
+    { value: 'updated-asc', label: 'Terakhir diperbarui · terlama' },
+  ];
+  const filterActive =
+    !!(query || createdFrom || createdTo || updatedFrom || updatedTo) || sort !== 'created-desc';
+  function resetFilters() {
+    setQuery('');
+    setSort('created-desc');
+    setCreatedFrom('');
+    setCreatedTo('');
+    setUpdatedFrom('');
+    setUpdatedTo('');
+  }
+  const filtered = projects
+    .filter(
+      (p) =>
+        p.title.toLocaleLowerCase('id').includes(query.trim().toLocaleLowerCase('id')) &&
+        inDateRange(p.created_at, createdFrom, createdTo) &&
+        inDateRange(p.updated_at, updatedFrom, updatedTo),
+    )
+    .sort(
+      (a, b) =>
+        compareDates(
+          sort.startsWith('updated') ? a.updated_at : a.created_at,
+          sort.startsWith('updated') ? b.updated_at : b.created_at,
+          sort.endsWith('asc'),
+        ) ||
+        compareNames(a.title, b.title) ||
+        a.id.localeCompare(b.id),
+    );
+  const eligible = projects
+    .filter((p) => !(jobs[p.id] || []).some((j) => isPending(j)))
+    .map((p) => p.id);
+  const visibleEligible = filtered.filter((p) => eligible.includes(p.id)).map((p) => p.id);
+  const blocked = [...selection.selected].some((id) => !eligible.includes(id));
+  async function removeProjects(ids: string[]) {
+    if (!ids.length || deleting) return;
+    if (
+      !(await confirm({
+        title: 'Hapus ' + ids.length + ' proyek?',
+        description:
+          'Proyek terpilih, seluruh highlight, video sumber, aset proyek, preview, dan hasil ekspornya akan dihapus permanen. Koleksi video sisipan bersama tetap tersedia.',
+        confirmLabel: 'Hapus proyek',
+        danger: true,
+      }))
+    )
+      return;
+    setDeleting(true);
+    setProgress(0);
+    setError('');
+    setResult('');
+    try {
+      const outcome = await deleteSelected(ids, (id) => '/projects/' + id, setProgress);
+      setProjects((rows) => rows.filter((p) => !outcome.deleted.includes(p.id)));
+      selection.remove(outcome.deleted);
+      setResult(deletionMessage(outcome));
+    } finally {
+      setDeleting(false);
+    }
+  }
+  useEffect(() => {
+    let live = true;
+    async function refresh() {
+      try {
+        const p = await api<Project[]>('/projects?view=' + view);
+        const j = await Promise.all(
+          p.map(
+            async (item) => [item.id, await api<Job[]>('/projects/' + item.id + '/jobs')] as const,
+          ),
+        );
+        if (live) {
+          setProjects(p);
+          setJobs(Object.fromEntries(j));
+        }
+      } catch (e) {
+        if (live) setError((e as Error).message);
+      } finally {
+        if (live) setLoading(false);
+      }
+    }
+    void refresh();
+    const timer = setInterval(refresh, 2500);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, [view]);
+  return (
+    <main className="mg-page mg-projects-page">
+      <header className="mg-page-header selection-page-header">
+        <div>
+          <h1>{view === 'transcription' ? 'Proyek Transkripsi' : 'Proyek Video'}</h1>
+          <p>Ikuti proses video dan pilih highlight untuk diedit.</p>
+        </div>
+        <div className="page-header-actions">
+          <SelectionToggle
+            active={selection.selecting}
+            onToggle={selection.toggleMode}
+            disabled={loading || deleting || (!selection.selecting && !projects.length)}
+          />
+          <Button asChild>
+            <Link to="/">
+              <Plus size={17} />
+              Highlight
+            </Link>
+          </Button>
+        </div>
+      </header>
+      {result && (
+        <p className="bulk-result" role="status">
+          {result}
+        </p>
+      )}
+      {error && (
+        <p className="notice" role="alert">
+          <AlertCircle size={17} />
+          {error}
+        </p>
+      )}
+      <QueueOverview />
+      <FilterDock
+        active={filterActive}
+        summary={`${filtered.length} dari ${projects.length} proyek · ${sortOptions.find((o) => o.value === sort)?.label}`}
+        onReset={resetFilters}
+      >
+        <label>
+          Nama proyek
+          <input
+            type="search"
+            aria-label="Cari nama proyek"
+            placeholder="Cari nama proyek…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </label>
+        <SortSelect value={sort} onChange={setSort} options={sortOptions} />
+        <DateRange
+          label="Tanggal dibuat"
+          from={createdFrom}
+          to={createdTo}
+          onChange={(a, b) => {
+            setCreatedFrom(a);
+            setCreatedTo(b);
+          }}
+        />
+        <DateRange
+          label="Terakhir diperbarui"
+          from={updatedFrom}
+          to={updatedTo}
+          onChange={(a, b) => {
+            setUpdatedFrom(a);
+            setUpdatedTo(b);
+          }}
+        />
+        <p className="filter-help filter-full">
+          Rentang tanggal mengikuti waktu lokal perangkat. Diperbarui saat proyek atau highlight
+          berubah; data lama memakai tanggal dibuat hingga perubahan berikutnya.
+        </p>
+      </FilterDock>
+      {loading ? (
+        <div className="mg-empty" role="status">
+          <Loader2 className="spin" size={28} />
+          <p>Memuat proyek…</p>
+        </div>
+      ) : !projects.length ? (
+        <div className="mg-empty">
+          <span className="mg-empty-icon">
+            <Film size={26} />
+          </span>
+          <h2>Belum ada proyek</h2>
+          <p>Tempel link YouTube di dashboard untuk membuat highlight pertama.</p>
+          <Button asChild>
+            <Link to="/">
+              <Plus size={16} />
+              Proyek
+            </Link>
+          </Button>
+        </div>
+      ) : (
+        <>
+          {selection.selecting && (
+            <BulkBar
+              selected={selection.selected}
+              visibleIds={visibleEligible}
+              onTogglePage={() => selection.togglePage(visibleEligible)}
+              onClear={selection.clear}
+              onDelete={() => void removeProjects([...selection.selected])}
+              disabled={blocked}
+              deleting={deleting}
+              progress={progress}
+              scope="proyek yang siap"
+            />
+          )}
+          <div className="mg-list-heading">
+            <span>{filtered.length} proyek</span>
+            <span>Progres diperbarui otomatis</span>
+          </div>
+          {!filtered.length && (
+            <div className="mg-empty filter-empty">
+              <h2>Proyek tidak ditemukan</h2>
+              <p>Coba kata pencarian atau rentang tanggal lain.</p>
+              <button type="button" className="button secondary" onClick={resetFilters}>
+                Reset filter
+              </button>
+            </div>
+          )}
+          <div className="mg-project-list">
+            {filtered.map((p) => (
+              <div
+                className={
+                  'mg-project-entry ' + (selection.selected.has(p.id) ? 'is-selected' : '')
+                }
+                key={p.id}
+              >
+                {selection.selecting && (
+                  <SelectCheckbox
+                    label={'Pilih proyek ' + p.title}
+                    checked={selection.selected.has(p.id)}
+                    disabled={deleting || !eligible.includes(p.id)}
+                    onChange={() => selection.toggle(p.id)}
+                  />
+                )}
+                <Link className="mg-project-row" to={base + '/' + p.id} key={p.id}>
+                  <span className="mg-project-icon">
+                    <Film size={22} />
+                  </span>
+                  <div className="mg-project-info">
+                    <h2 title={p.title}>{p.title}</h2>
+                    <div className="mg-meta">
+                      <span>{p.workflow === 'review' ? 'Tinjau dahulu' : p.aspect_ratio}</span>
+                      <span>
+                        <Layers size={13} />
+                        {p.highlight_count} highlight AI
+                      </span>
+                      <span>
+                        <Clock3 size={13} />
+                        {p.duration ? stamp(p.duration) : 'Menyiapkan sumber'}
+                      </span>
+                      <span
+                        className="project-date"
+                        title={new Date(p.created_at).toLocaleString('id-ID')}
+                      >
+                        <CalendarDays size={13} />
+                        Dibuat {new Date(p.created_at).toLocaleDateString('id-ID')}
+                      </span>
+                      <span
+                        className="project-date"
+                        title={new Date(p.updated_at).toLocaleString('id-ID')}
+                      >
+                        Diperbarui {new Date(p.updated_at).toLocaleDateString('id-ID')}
+                      </span>
+                    </div>
+                  </div>
+                  {p.workflow === 'review' && p.review_counts && (
+                    <small>
+                      {view === 'transcription' && p.highlight_request_counts ? (
+                        <>
+                          {p.highlight_request_counts.requested} diminta ·{' '}
+                          {p.highlight_request_counts.available} tersedia ·{' '}
+                          {p.highlight_request_counts.unfulfilled} belum terpenuhi ·{' '}
+                          {p.highlight_request_counts.failed} gagal
+                        </>
+                      ) : (
+                        <>
+                          {p.review_counts.review} menunggu persetujuan ·{' '}
+                          {p.review_counts.processing} diproses · {p.review_counts.ready} siap
+                          diedit
+                        </>
+                      )}
+                    </small>
+                  )}
+                  <Progress jobs={jobs[p.id] || []} />
+                  <ArrowRight className="mg-row-arrow" size={18} />
+                </Link>
+                <ActionMenu label={'Aksi proyek ' + p.title}>
+                  <ActionItem
+                    danger
+                    disabled={deleting || !eligible.includes(p.id)}
+                    onClick={() => void removeProjects([p.id])}
+                  >
+                    <Trash2 size={16} />
+                    Hapus proyek
+                  </ActionItem>
+                </ActionMenu>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </main>
+  );
 }
 
-export function HighlightsPage() {
-  const {id}=useParams();const confirm=useConfirm();
-  const [rangeClip,setRangeClip]=useState<Clip|null>(null),[project,setProject]=useState<Project|null>(null),[clips,setClips]=useState<Clip[]>([]),[jobs,setJobs]=useState<Job[]>([]),[error,setError]=useState(''),[busy,setBusy]=useState(false),[creating,setCreating]=useState(false),[title,setTitle]=useState('Highlight baru'),[start,setStart]=useState(0),[end,setEnd]=useState(30),[renaming,setRenaming]=useState<Clip|null>(null),[newTitle,setNewTitle]=useState(''),[loading,setLoading]=useState(true),[deleting,setDeleting]=useState(false),[progress,setProgress]=useState(0),[result,setResult]=useState('');
-  const selection=useBulkSelection(clips.map(c=>c.id)),request=useRef(0),currentId=useRef(id);currentId.current=id;
-  async function refresh(){const token=++request.current;const [p,c,j]=await Promise.all([api<Project>('/projects/'+id),api<Clip[]>('/projects/'+id+'/clips'),api<Job[]>('/projects/'+id+'/jobs')]);if(token!==request.current||p.id!==currentId.current)return;setProject(p);setClips(c);setJobs(j)}
-  useEffect(()=>{let live=true,timer:ReturnType<typeof setInterval>|undefined;setLoading(true);setProject(null);setClips([]);setJobs([]);setError('');setResult('');setCreating(false);setRenaming(null);selection.exit();void refresh().catch(e=>{if(live)setError(e.message)}).finally(()=>{if(live){setLoading(false);timer=setInterval(()=>void refresh().catch(e=>{if(live)setError(e.message)}),2500)}});return()=>{live=false;request.current++;clearInterval(timer)}},[id]);
-  async function action(fn:()=>Promise<unknown>){setBusy(true);setError('');try{await fn();await refresh()}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
-  const active=jobs.find(j=>j.status==='running'||j.status==='cancelling')||jobs.find(j=>isPending(j)),lastAnalysis=jobs.find(j=>j.kind==='analysis'),canRetryAnalysis=!active&&(lastAnalysis?['failed','cancelled'].includes(lastAnalysis.status):clips.length===0);
-  async function create(){if(!project||!title.trim()||end<=start||start<0||end>project.duration)throw new Error('Isi judul dan rentang waktu yang berada di dalam video sumber.');const transcript=await api<{words:SourceWord[]}>('/projects/'+id+'/transcript');const a=Math.round(start*30)/30,b=Math.min(Math.round(end*30)/30,Math.floor(project.duration*30)/30);const words=transcript.words.filter(w=>w.end>a&&w.start<b).map(w=>({...w,start:Math.max(0,w.start-a),end:Math.min(b-a,w.end-a)}));const plan=blankPlan(b-a,words);plan.segments[0].source_in=Math.round(a*30);plan.segments[0].transform.mode='fill';await api('/projects/'+id+'/clips','POST',{title:title.trim(),plan});setCreating(false)}
-  async function remove(clip:Clip){if(await confirm({title:'Hapus highlight?',description:'“'+clip.title+'” beserta preview dan hasil ekspornya akan dihapus permanen. Video sumber bersama tetap tersedia.',confirmLabel:'Hapus highlight',danger:true}))await action(async()=>{await api('/clips/'+clip.id,'DELETE');localStorage.removeItem('vc-editor-v2:'+clip.id)})}
-  async function removeHighlights(){const ids=[...selection.selected];if(!ids.length||active||deleting)return;if(!await confirm({title:'Hapus '+ids.length+' highlight?',description:'Highlight terpilih beserta preview dan hasil ekspornya akan dihapus permanen. Video sumber proyek tetap tersedia.',confirmLabel:'Hapus highlight',danger:true}))return;setDeleting(true);setProgress(0);setError('');setResult('');try{const outcome=await deleteSelected(ids,id=>'/clips/'+id,setProgress);setClips(rows=>rows.filter(c=>!outcome.deleted.includes(c.id)));selection.remove(outcome.deleted);setResult(deletionMessage(outcome));await refresh()}catch(e){setError((e as Error).message)}finally{setDeleting(false)}}
-  if(loading||project&&project.id!==id)return <main className="mg-page mg-highlights-page"><Link className="mg-back" to="/projects"><ArrowLeft size={16}/>Semua proyek</Link><div className="highlight-loading" role="status" aria-busy="true"><p className="loading-label"><Loader2 size={20} className="spin"/>Memuat highlight proyek…</p><div className="skeleton-heading" aria-hidden="true"/><div className="skeleton-grid" aria-hidden="true">{[1,2,3].map(n=><div className="skeleton-card" key={n}/>)}</div></div></main>;
-  if(!project)return <main className="mg-page mg-highlights-page"><Link className="mg-back" to="/projects"><ArrowLeft size={16}/>Semua proyek</Link><div className="mg-empty"><AlertCircle size={28}/><h1>Proyek belum dapat dimuat</h1><p role="alert">{error||'Periksa koneksi lalu coba lagi.'}</p><Button onClick={()=>{setLoading(true);setError('');void refresh().catch(e=>setError(e.message)).finally(()=>setLoading(false))}}><RefreshCw size={16}/>Muat ulang</Button></div></main>;
-  if(project.workflow==='review')return <ReviewHighlights project={project} clips={clips} jobs={jobs} refresh={refresh}/>;
-  return <main className="mg-page mg-highlights-page">
-    <Link className="mg-back" to="/projects"><ArrowLeft size={16}/>Semua proyek</Link>
-    <header className="mg-page-header selection-page-header"><div><h1 className="mg-project-title">{project?.title||'Memuat proyek…'}</h1><div className="mg-meta"><span>{project?.aspect_ratio||'—'}</span><span><Clock3 size={14}/>{project?.duration?stamp(project.duration):'Menyiapkan video'}</span><span><Layers size={14}/>{clips.length} highlight</span></div></div><div className="page-header-actions"><SelectionToggle active={selection.selecting} onToggle={selection.toggleMode} disabled={busy||deleting||(!selection.selecting&&!clips.length)}/><Button disabled={busy||deleting||!!active||!project?.duration} onClick={()=>{setEnd(Math.min(30,project!.duration));setCreating(true)}}><Plus size={17}/>Highlight</Button></div></header>
-    {error&&<p className="notice" role="alert"><AlertCircle size={17}/>{error}</p>}
-    <section className="mg-process-panel" aria-label="Status pemrosesan"><Progress jobs={jobs}/>{canRetryAnalysis&&<div className="mg-process-retry"><p>{lastAnalysis?.error||'Proyek belum selesai dianalisis.'}</p><ModelSelect value={project?.gemini_model||''} disabled={busy} onChange={gemini_model=>void action(()=>api('/projects/'+id+'/model','PATCH',{gemini_model}))}/>{lastAnalysis&&<p>Coba lagi memakai snapshot model semula. Memilih model lain akan membuat pekerjaan analisis baru.</p>}<Button disabled={busy||!project?.gemini_model} onClick={()=>void action(()=>api(lastAnalysis&&lastAnalysis.payload.gemini_model===project.gemini_model?'/jobs/'+lastAnalysis.id+'/retry':'/projects/'+id+'/analysis','POST'))}><RefreshCw size={16}/>{lastAnalysis&&lastAnalysis.payload.gemini_model!==project.gemini_model?'Analisis dengan model ini':'Proses Ulang'}</Button></div>}</section>
-    {jobs.filter(isPending).map(j=><div key={j.id} className="queue-project-task"><div><strong>{kindLabel(j.kind)}</strong><span>{jobLabel(j)}{j.connection_label?' · '+j.connection_label:''}</span><button type="button" className="button secondary" disabled={busy||j.status==='cancelling'} onClick={()=>void action(()=>api('/jobs/'+j.id+'/cancel','POST'))}>Batalkan</button></div>{j.kind==='export'&&<span>{String(j.payload.resolution||1080)}p · {j.progress}%</span>}{j.status==='running'&&<progress max={100} value={j.progress} aria-label="Progres pekerjaan"/>}<WaitingDetails job={j} disabled={busy} onCheck={()=>void action(()=>api('/jobs/'+j.id+'/check','POST'))}/></div>)}
-    {project?.visual_mode==='mix'&&<div className="mg-filter-summary"><SlidersHorizontal size={16}/><span>Filter Mix</span><div>{project.mix_hashtags?.length?project.mix_hashtags.map(tag=><span className="mg-tag" key={tag}>#{tag}</span>):<span className="mg-muted">Tanpa batasan topik sisipan</span>}</div></div>}
-    {project?.analysis_report?.mix_message&&<p className="mg-info-message">{project.analysis_report.mix_message}</p>}
-    {project?.analysis_report?.mix_status==='failed'&&<div className="notice"><span>Highlight podcast siap. Mix belum selesai; edit yang sudah disimpan tetap aman.</span><Button variant="secondary" disabled={!!active||busy} onClick={()=>void action(()=>api('/projects/'+id+'/mix','POST'))}><RefreshCw size={16}/>Coba Mix lagi</Button></div>}
-    {project?.analysis_report?.unmet_requests?.map((text,i)=><p className="mg-info-message" key={i}>{text}</p>)}
-    {result&&<p className="bulk-result" role="status">{result}</p>}
-    {selection.selecting&&clips.length>0&&<BulkBar selected={selection.selected} visibleIds={active?[]:clips.map(c=>c.id)} onTogglePage={()=>selection.togglePage(clips.map(c=>c.id))} onClear={selection.clear} onDelete={()=>void removeHighlights()} disabled={busy||deleting||!!active} deleting={deleting} progress={progress} scope="highlight"/>}
-    {!clips.length?<div className="mg-empty"><span className="mg-empty-icon">{active?<Loader2 size={26} className="spin"/>:<Film size={26}/>}</span><h2>{active?'Highlight sedang disiapkan':'Belum ada highlight'}</h2><p>{active?'Proses tetap berjalan saat kamu meninggalkan halaman ini.':'Tambahkan highlight dari video sumber atau jalankan analisis.'}</p></div>:<div className="mg-highlight-grid">{clips.map((clip,i)=><article className={'mg-highlight-card '+(selection.selected.has(clip.id)?'is-selected':'')} key={clip.id}>{selection.selecting&&<div className="mg-highlight-select"><SelectCheckbox label={'Pilih highlight '+clip.title} checked={selection.selected.has(clip.id)} disabled={busy||deleting||!!active} onChange={()=>selection.toggle(clip.id)}/></div>}
-      <Link className="mg-highlight-open" to={'/projects/'+id+'/clips/'+clip.id}><div className="mg-highlight-poster"><img src={'/api/editor-media/'+id+'/thumbs/'+String(Math.floor(clip.plan.segments[0].source_in/150)+1).padStart(5,'0')+'.jpg'} onError={e=>{e.currentTarget.style.visibility='hidden'}} alt=""/><span className="mg-highlight-number">{String(i+1).padStart(2,'0')}</span><span className="mg-highlight-duration"><Clock3 size={12}/>{stamp(total(clip.plan)/30)}</span></div><div className="mg-highlight-copy"><h2 title={clip.title}>{clip.title}</h2><p>{clip.reason||'Highlight dari video sumber, siap disesuaikan di studio.'}</p><div className="highlight-source-range"><Clock3 size={14}/><span>Diambil dari YouTube: {sourceRanges(clip.plan).slice(0,2).map(rangeLabel).join(' · ')}</span></div>{clip.fulfills_prompt&&<span className="mg-prompt-match"><CheckCircle2 size={13}/>Sesuai prompt tambahan</span>}</div></Link>
-      {sourceRanges(clip.plan).length>2&&<button className="highlight-ranges-link" onClick={()=>setRangeClip(clip)}>Lihat semua rentang ({sourceRanges(clip.plan).length})</button>}<footer className="mg-highlight-footer"><Link className="mg-studio-link" to={'/projects/'+id+'/clips/'+clip.id}>Buka studio<ArrowRight size={16}/></Link><ActionMenu label={'Aksi '+clip.title}><ActionItem onClick={()=>{void navigator.clipboard.writeText(exclusionPrompt(clip.plan)).then(()=>setResult('Batasan waktu disalin.')).catch(()=>{setRangeClip(clip);setError('Clipboard tidak tersedia. Salin teks batasan dari dialog rentang.')})}}><Copy size={16}/>Salin batasan waktu</ActionItem><ActionItem disabled={busy||deleting} onClick={()=>{setRenaming(clip);setNewTitle(clip.title)}}><Pencil size={16}/>Ubah nama</ActionItem><ActionItem disabled={busy||deleting||!!active} onClick={()=>void action(()=>api('/projects/'+id+'/clips','POST',{title:(clip.title+' — salinan').slice(0,200),plan:clip.plan,aspect_ratio:clip.aspect_ratio,processing_config:clip.processing_config,instansi_ids:clip.instansi_ids}))}><Copy size={16}/>Duplikat</ActionItem><ActionItem danger disabled={busy||deleting||!!active} onClick={()=>void remove(clip)}><Trash2 size={16}/>Hapus highlight</ActionItem></ActionMenu></footer>
-    </article>)}</div>}
-    <Dialog open={!!rangeClip} onClose={()=>setRangeClip(null)} title="Rentang video YouTube" description="Mengikuti edit terakhir yang tersimpan; waktu diurutkan berdasarkan video sumber.">{rangeClip&&<div className="mg-dialog-form"><ul>{sourceRanges(rangeClip.plan).map((r,i)=><li key={i}>{rangeLabel(r)}</li>)}</ul><label>Batasan untuk prompt tambahan<textarea readOnly value={exclusionPrompt(rangeClip.plan)} onFocus={e=>e.target.select()}/></label></div>}</Dialog>
-    <Dialog open={creating} onClose={()=>{if(!busy)setCreating(false)}} title="Tambah highlight" description="Pilih rentang video sumber. Kamu bisa menyesuaikan potongannya secara visual di studio." footer={<><Button variant="secondary" type="button" disabled={busy} onClick={()=>setCreating(false)}>Batal</Button><Button form="create-highlight" disabled={busy||!title.trim()}>{busy?<Loader2 size={16} className="spin"/>:<Plus size={16}/>}Highlight</Button></>}><form id="create-highlight" className="mg-dialog-form" onSubmit={e=>{e.preventDefault();void action(create)}}><label>Judul highlight<input autoFocus value={title} maxLength={200} onChange={e=>setTitle(e.target.value)} required/></label><div className="mg-range-fields"><label>Mulai (detik)<input type="number" min={0} step={1/30} value={start} onChange={e=>setStart(+e.target.value)} required/></label><label>Akhir (detik)<input type="number" min={0} max={project?.duration} step={1/30} value={end} onChange={e=>setEnd(+e.target.value)} required/></label></div>{error&&<p className="mg-form-error" role="alert">{error}</p>}</form></Dialog>
-    <Dialog open={!!renaming} onClose={()=>{if(!busy)setRenaming(null)}} title="Ubah nama highlight" description="Nama ini ditampilkan pada daftar highlight dan studio." footer={<><Button type="button" variant="secondary" disabled={busy} onClick={()=>setRenaming(null)}>Batal</Button><Button form="rename-highlight" disabled={busy||!newTitle.trim()}>{busy?<Loader2 size={16} className="spin"/>:<Pencil size={16}/>}Simpan nama</Button></>}><form id="rename-highlight" className="mg-dialog-form" onSubmit={e=>{e.preventDefault();if(renaming)void action(async()=>{await api('/clips/'+renaming.id,'PATCH',{title:newTitle.trim(),revision:renaming.revision,plan:renaming.plan});setRenaming(null)})}}><label>Nama highlight<input autoFocus value={newTitle} onChange={e=>setNewTitle(e.target.value)} maxLength={200} required/></label>{error&&<p className="mg-form-error" role="alert">{error}</p>}</form></Dialog>
-  </main>;
+export function HighlightsPage({ view = 'video' }: { view?: 'video' | 'transcription' }) {
+  const { id, proposalId } = useParams();
+  const confirm = useConfirm();
+  const [rangeClip, setRangeClip] = useState<Clip | null>(null),
+    [project, setProject] = useState<Project | null>(null),
+    [clips, setClips] = useState<Clip[]>([]),
+    [jobs, setJobs] = useState<Job[]>([]),
+    [error, setError] = useState(''),
+    [busy, setBusy] = useState(false),
+    [renaming, setRenaming] = useState<Clip | null>(null),
+    [newTitle, setNewTitle] = useState(''),
+    [loading, setLoading] = useState(true),
+    [deleting, setDeleting] = useState(false),
+    [progress, setProgress] = useState(0),
+    [result, setResult] = useState('');
+  const selection = useBulkSelection(clips.map((c) => c.id)),
+    request = useRef(0),
+    currentId = useRef(id);
+  currentId.current = id;
+  async function refresh() {
+    const token = ++request.current;
+    const [p, c, j] = await Promise.all([
+      api<Project>('/projects/' + id),
+      api<Clip[]>('/projects/' + id + '/clips'),
+      api<Job[]>('/projects/' + id + '/jobs'),
+    ]);
+    if (token !== request.current || p.id !== currentId.current) return;
+    setProject(p);
+    setClips(c);
+    setJobs(j);
+  }
+  useEffect(() => {
+    let live = true,
+      timer: ReturnType<typeof setInterval> | undefined;
+    setLoading(true);
+    setProject(null);
+    setClips([]);
+    setJobs([]);
+    setError('');
+    setResult('');
+    setRenaming(null);
+    selection.exit();
+    void refresh()
+      .catch((e) => {
+        if (live) setError(e.message);
+      })
+      .finally(() => {
+        if (live) {
+          setLoading(false);
+          timer = setInterval(
+            () =>
+              void refresh().catch((e) => {
+                if (live) setError(e.message);
+              }),
+            2500,
+          );
+        }
+      });
+    return () => {
+      live = false;
+      request.current++;
+      clearInterval(timer);
+    };
+  }, [id]);
+  async function action(fn: () => Promise<unknown>) {
+    setBusy(true);
+    setError('');
+    try {
+      await fn();
+      await refresh();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  const active =
+      jobs.find((j) => j.status === 'running' || j.status === 'cancelling') ||
+      jobs.find((j) => isPending(j)),
+    lastAnalysis = jobs.find((j) => j.kind === 'analysis'),
+    canRetryAnalysis =
+      !active &&
+      (lastAnalysis ? ['failed', 'cancelled'].includes(lastAnalysis.status) : clips.length === 0);
+  async function remove(clip: Clip) {
+    if (
+      await confirm({
+        title: 'Hapus highlight?',
+        description:
+          '“' +
+          clip.title +
+          '” beserta preview dan hasil ekspornya akan dihapus permanen. Video sumber bersama tetap tersedia.',
+        confirmLabel: 'Hapus highlight',
+        danger: true,
+      })
+    )
+      await action(async () => {
+        await api('/clips/' + clip.id, 'DELETE');
+        localStorage.removeItem('vc-editor-v2:' + clip.id);
+      });
+  }
+  async function removeHighlights() {
+    const ids = [...selection.selected];
+    if (!ids.length || active || deleting) return;
+    if (
+      !(await confirm({
+        title: 'Hapus ' + ids.length + ' highlight?',
+        description:
+          'Highlight terpilih beserta preview dan hasil ekspornya akan dihapus permanen. Video sumber proyek tetap tersedia.',
+        confirmLabel: 'Hapus highlight',
+        danger: true,
+      }))
+    )
+      return;
+    setDeleting(true);
+    setProgress(0);
+    setError('');
+    setResult('');
+    try {
+      const outcome = await deleteSelected(ids, (id) => '/clips/' + id, setProgress);
+      setClips((rows) => rows.filter((c) => !outcome.deleted.includes(c.id)));
+      selection.remove(outcome.deleted);
+      setResult(deletionMessage(outcome));
+      await refresh();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setDeleting(false);
+    }
+  }
+  if (loading || (project && project.id !== id))
+    return (
+      <main className="mg-page mg-highlights-page">
+        <Link className="mg-back" to="/projects">
+          <ArrowLeft size={16} />
+          Semua proyek
+        </Link>
+        <div className="highlight-loading" role="status" aria-busy="true">
+          <p className="loading-label">
+            <Loader2 size={20} className="spin" />
+            Memuat highlight proyek…
+          </p>
+          <div className="skeleton-heading" aria-hidden="true" />
+          <div className="skeleton-grid" aria-hidden="true">
+            {[1, 2, 3].map((n) => (
+              <div className="skeleton-card" key={n} />
+            ))}
+          </div>
+        </div>
+      </main>
+    );
+  if (!project)
+    return (
+      <main className="mg-page mg-highlights-page">
+        <Link className="mg-back" to="/projects">
+          <ArrowLeft size={16} />
+          Semua proyek
+        </Link>
+        <div className="mg-empty">
+          <AlertCircle size={28} />
+          <h1>Proyek belum dapat dimuat</h1>
+          <p role="alert">{error || 'Periksa koneksi lalu coba lagi.'}</p>
+          <Button
+            onClick={() => {
+              setLoading(true);
+              setError('');
+              void refresh()
+                .catch((e) => setError(e.message))
+                .finally(() => setLoading(false));
+            }}
+          >
+            <RefreshCw size={16} />
+            Muat ulang
+          </Button>
+        </div>
+      </main>
+    );
+  if (project.workflow === 'review' || view === 'transcription')
+    return (
+      <ReviewHighlights
+        project={project}
+        clips={clips}
+        jobs={jobs}
+        refresh={refresh}
+        view={view}
+        detailId={proposalId}
+      />
+    );
+  return (
+    <main className="mg-page mg-highlights-page">
+      <RouterRecoveryList jobs={jobs} onComplete={refresh} />
+      <Link className="mg-back" to="/projects">
+        <ArrowLeft size={16} />
+        Semua proyek
+      </Link>
+      <header className="mg-page-header selection-page-header">
+        <div>
+          <h1 className="mg-project-title">{project?.title || 'Memuat proyek…'}</h1>
+          <div className="mg-meta">
+            <span>{project?.aspect_ratio || '—'}</span>
+            <span>
+              <Clock3 size={14} />
+              {project?.duration ? stamp(project.duration) : 'Menyiapkan video'}
+            </span>
+            <span>
+              <Layers size={14} />
+              {clips.length} highlight
+            </span>
+          </div>
+        </div>
+        <div className="page-header-actions">
+          <SelectionToggle
+            active={selection.selecting}
+            onToggle={selection.toggleMode}
+            disabled={busy || deleting || (!selection.selecting && !clips.length)}
+          />
+          <ProposalSearch project={project} onComplete={() => void refresh()} />
+        </div>
+      </header>
+      {error && (
+        <p className="notice" role="alert">
+          <AlertCircle size={17} />
+          {error}
+        </p>
+      )}
+      <section className="mg-process-panel" aria-label="Status pemrosesan">
+        <Progress jobs={jobs} />
+        {canRetryAnalysis && (
+          <div className="mg-process-retry">
+            <p>{lastAnalysis?.error || 'Proyek belum selesai dianalisis.'}</p>
+            <ModelSelect
+              value={project?.gemini_model || ''}
+              disabled={busy}
+              onChange={(gemini_model) =>
+                void action(() => api('/projects/' + id + '/model', 'PATCH', { gemini_model }))
+              }
+            />
+            {lastAnalysis && (
+              <p>
+                Coba lagi memakai snapshot model semula. Memilih model lain akan membuat pekerjaan
+                analisis baru.
+              </p>
+            )}
+            <Button
+              disabled={busy || !project?.gemini_model}
+              onClick={() =>
+                void action(() =>
+                  api(
+                    lastAnalysis && lastAnalysis.payload.gemini_model === project.gemini_model
+                      ? '/jobs/' + lastAnalysis.id + '/retry'
+                      : '/projects/' + id + '/analysis',
+                    'POST',
+                  ),
+                )
+              }
+            >
+              <RefreshCw size={16} />
+              {lastAnalysis && lastAnalysis.payload.gemini_model !== project.gemini_model
+                ? 'Analisis dengan model ini'
+                : 'Proses Ulang'}
+            </Button>
+          </div>
+        )}
+      </section>
+      {jobs.filter(isPending).map((j) => (
+        <div key={j.id} className="queue-project-task">
+          <div>
+            <strong>{kindLabel(j.kind)}</strong>
+            <span>
+              {jobLabel(j)}
+              {j.connection_label ? ' · ' + j.connection_label : ''}
+            </span>
+            <button
+              type="button"
+              className="button secondary"
+              disabled={busy || j.status === 'cancelling'}
+              onClick={() => void action(() => api('/jobs/' + j.id + '/cancel', 'POST'))}
+            >
+              Batalkan
+            </button>
+          </div>
+          {j.kind === 'export' && (
+            <span>
+              {String(j.payload.resolution || 1080)}p · {j.progress}%
+            </span>
+          )}
+          {j.status === 'running' && (
+            <progress max={100} value={j.progress} aria-label="Progres pekerjaan" />
+          )}
+          <WaitingDetails
+            job={j}
+            disabled={busy}
+            onCheck={() => void action(() => api('/jobs/' + j.id + '/check', 'POST'))}
+          />
+        </div>
+      ))}
+      {project?.visual_mode === 'mix' && (
+        <div className="mg-filter-summary">
+          <SlidersHorizontal size={16} />
+          <span>Filter Mix</span>
+          <div>
+            {project.mix_hashtags?.length ? (
+              project.mix_hashtags.map((tag) => (
+                <span className="mg-tag" key={tag}>
+                  #{tag}
+                </span>
+              ))
+            ) : (
+              <span className="mg-muted">Tanpa batasan topik sisipan</span>
+            )}
+          </div>
+        </div>
+      )}
+      {project?.analysis_report?.mix_message && (
+        <p className="mg-info-message">{project.analysis_report.mix_message}</p>
+      )}
+      {project?.analysis_report?.mix_status === 'failed' && (
+        <div className="notice">
+          <span>
+            Highlight podcast siap. Mix belum selesai; edit yang sudah disimpan tetap aman.
+          </span>
+          <Button
+            variant="secondary"
+            disabled={!!active || busy}
+            onClick={() => void action(() => api('/projects/' + id + '/mix', 'POST'))}
+          >
+            <RefreshCw size={16} />
+            Coba Mix lagi
+          </Button>
+        </div>
+      )}
+      {project?.analysis_report?.unmet_requests?.map((text, i) => (
+        <p className="mg-info-message" key={i}>
+          {text}
+        </p>
+      ))}
+      {result && (
+        <p className="bulk-result" role="status">
+          {result}
+        </p>
+      )}
+      {selection.selecting && clips.length > 0 && (
+        <BulkBar
+          selected={selection.selected}
+          visibleIds={active ? [] : clips.map((c) => c.id)}
+          onTogglePage={() => selection.togglePage(clips.map((c) => c.id))}
+          onClear={selection.clear}
+          onDelete={() => void removeHighlights()}
+          disabled={busy || deleting || !!active}
+          deleting={deleting}
+          progress={progress}
+          scope="highlight"
+        />
+      )}
+      {!clips.length ? (
+        <div className="mg-empty">
+          <span className="mg-empty-icon">
+            {active ? <Loader2 size={26} className="spin" /> : <Film size={26} />}
+          </span>
+          <h2>{active ? 'Highlight sedang disiapkan' : 'Belum ada highlight'}</h2>
+          <p>
+            {active
+              ? 'Proses tetap berjalan saat kamu meninggalkan halaman ini.'
+              : 'Tambahkan highlight dari video sumber atau jalankan analisis.'}
+          </p>
+        </div>
+      ) : (
+        <div className="mg-highlight-grid">
+          {clips.map((clip, i) => (
+            <article
+              className={
+                'mg-highlight-card ' + (selection.selected.has(clip.id) ? 'is-selected' : '')
+              }
+              key={clip.id}
+            >
+              {selection.selecting && (
+                <div className="mg-highlight-select">
+                  <SelectCheckbox
+                    label={'Pilih highlight ' + clip.title}
+                    checked={selection.selected.has(clip.id)}
+                    disabled={busy || deleting || !!active}
+                    onChange={() => selection.toggle(clip.id)}
+                  />
+                </div>
+              )}
+              <Link className="mg-highlight-open" to={'/projects/' + id + '/clips/' + clip.id}>
+                <div className="mg-highlight-poster">
+                  <img
+                    src={
+                      '/api/editor-media/' +
+                      id +
+                      '/thumbs/' +
+                      String(Math.floor(clip.plan.segments[0].source_in / 150) + 1).padStart(
+                        5,
+                        '0',
+                      ) +
+                      '.jpg'
+                    }
+                    onError={(e) => {
+                      e.currentTarget.style.visibility = 'hidden';
+                    }}
+                    alt=""
+                  />
+                  <span className="mg-highlight-number">{String(i + 1).padStart(2, '0')}</span>
+                  <span className="mg-highlight-duration">
+                    <Clock3 size={12} />
+                    {stamp(total(clip.plan) / 30)}
+                  </span>
+                </div>
+                <div className="mg-highlight-copy">
+                  <h2 title={clip.title}>{clip.title}</h2>
+                  <p>{clip.reason || 'Highlight dari video sumber, siap disesuaikan di studio.'}</p>
+                  <div className="highlight-source-range">
+                    <Clock3 size={14} />
+                    <span>
+                      Diambil dari YouTube:{' '}
+                      {sourceRanges(clip.plan).slice(0, 2).map(rangeLabel).join(' · ')}
+                    </span>
+                  </div>
+                  {clip.fulfills_prompt && (
+                    <span className="mg-prompt-match">
+                      <CheckCircle2 size={13} />
+                      Sesuai prompt tambahan
+                    </span>
+                  )}
+                </div>
+              </Link>
+              {sourceRanges(clip.plan).length > 2 && (
+                <button className="highlight-ranges-link" onClick={() => setRangeClip(clip)}>
+                  Lihat semua rentang ({sourceRanges(clip.plan).length})
+                </button>
+              )}
+              <footer className="mg-highlight-footer">
+                <Link className="mg-studio-link" to={'/projects/' + id + '/clips/' + clip.id}>
+                  Buka studio
+                  <ArrowRight size={16} />
+                </Link>
+                <ActionMenu label={'Aksi ' + clip.title}>
+                  <ActionItem
+                    onClick={() => {
+                      void navigator.clipboard
+                        .writeText(exclusionPrompt(clip.plan))
+                        .then(() => setResult('Batasan waktu disalin.'))
+                        .catch(() => {
+                          setRangeClip(clip);
+                          setError(
+                            'Clipboard tidak tersedia. Salin teks batasan dari dialog rentang.',
+                          );
+                        });
+                    }}
+                  >
+                    <Copy size={16} />
+                    Salin batasan waktu
+                  </ActionItem>
+                  <ActionItem
+                    disabled={busy || deleting}
+                    onClick={() => {
+                      setRenaming(clip);
+                      setNewTitle(clip.title);
+                    }}
+                  >
+                    <Pencil size={16} />
+                    Ubah nama
+                  </ActionItem>
+                  <ActionItem
+                    disabled={busy || deleting || !!active}
+                    onClick={() =>
+                      void action(() =>
+                        api('/projects/' + id + '/clips', 'POST', {
+                          title: (clip.title + ' — salinan').slice(0, 200),
+                          plan: clip.plan,
+                          aspect_ratio: clip.aspect_ratio,
+                          processing_config: clip.processing_config,
+                          instansi_ids: clip.instansi_ids,
+                        }),
+                      )
+                    }
+                  >
+                    <Copy size={16} />
+                    Duplikat
+                  </ActionItem>
+                  <ActionItem
+                    danger
+                    disabled={busy || deleting || !!active}
+                    onClick={() => void remove(clip)}
+                  >
+                    <Trash2 size={16} />
+                    Hapus highlight
+                  </ActionItem>
+                </ActionMenu>
+              </footer>
+            </article>
+          ))}
+        </div>
+      )}
+      <Dialog
+        open={!!rangeClip}
+        onClose={() => setRangeClip(null)}
+        title="Rentang video YouTube"
+        description="Mengikuti edit terakhir yang tersimpan; waktu diurutkan berdasarkan video sumber."
+      >
+        {rangeClip && (
+          <div className="mg-dialog-form">
+            <ul>
+              {sourceRanges(rangeClip.plan).map((r, i) => (
+                <li key={i}>{rangeLabel(r)}</li>
+              ))}
+            </ul>
+            <label>
+              Batasan untuk prompt tambahan
+              <textarea
+                readOnly
+                value={exclusionPrompt(rangeClip.plan)}
+                onFocus={(e) => e.target.select()}
+              />
+            </label>
+          </div>
+        )}
+      </Dialog>
+      <Dialog
+        open={!!renaming}
+        onClose={() => {
+          if (!busy) setRenaming(null);
+        }}
+        title="Ubah nama highlight"
+        description="Nama ini ditampilkan pada daftar highlight dan studio."
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={busy}
+              onClick={() => setRenaming(null)}
+            >
+              Batal
+            </Button>
+            <Button form="rename-highlight" disabled={busy || !newTitle.trim()}>
+              {busy ? <Loader2 size={16} className="spin" /> : <Pencil size={16} />}Simpan nama
+            </Button>
+          </>
+        }
+      >
+        <form
+          id="rename-highlight"
+          className="mg-dialog-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (renaming)
+              void action(async () => {
+                await api('/clips/' + renaming.id, 'PATCH', {
+                  title: newTitle.trim(),
+                  revision: renaming.revision,
+                  plan: renaming.plan,
+                });
+                setRenaming(null);
+              });
+          }}
+        >
+          <label>
+            Nama highlight
+            <input
+              autoFocus
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              maxLength={200}
+              required
+            />
+          </label>
+          {error && (
+            <p className="mg-form-error" role="alert">
+              {error}
+            </p>
+          )}
+        </form>
+      </Dialog>
+    </main>
+  );
 }
