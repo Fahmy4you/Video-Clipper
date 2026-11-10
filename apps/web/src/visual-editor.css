@@ -726,11 +726,17 @@
 }
 .timeline-content {
   position: relative;
+  isolation: isolate;
   min-width: 100%;
   padding-bottom: 8px;
 }
+.timeline-ruler-row {
+  display: flex;
+  height: 28px;
+}
 .time-ruler {
   position: relative;
+  flex-shrink: 0;
   height: 28px;
   background: repeating-linear-gradient(
     90deg,
@@ -767,7 +773,7 @@
 .track-label {
   position: sticky;
   left: 0;
-  z-index: 6;
+  z-index: 20;
   display: flex;
   align-items: center;
   width: 100px;
@@ -1486,8 +1492,16 @@
   background: var(--surface);
 }
 
+.transition-track {
+  height: 40px;
+  min-height: 40px;
+}
+.transition-track .track-body {
+  overflow: hidden;
+}
 .transition-boundary {
   position: absolute;
+  top: 50%;
   z-index: 12;
   width: 28px;
   height: 28px;
@@ -1546,26 +1560,177 @@
 .preview-preparation progress {
   width: min(280px, 80%);
 }
-.export-resolution {
-  display: grid;
-  gap: 8px;
+.ui-dialog.export-dialog {
+  width: min(520px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
 }
-.export-history {
-  margin-top: 24px;
-}
-.export-history summary {
+.export-dialog[open] {
   display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.export-dialog > header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
   align-items: center;
+  gap: 8px 16px;
+  padding: 24px;
+  flex-shrink: 0;
+}
+.export-dialog > header > div {
+  display: contents;
+}
+.export-dialog > header h2 {
+  grid-column: 1;
+  grid-row: 1;
+  margin: 0;
+}
+.export-dialog > header p {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  margin: 0;
+}
+.export-dialog > header .icon-button {
+  grid-column: 2;
+  grid-row: 1;
+  width: 44px;
+  height: 44px;
+}
+.export-dialog .dialog-body {
+  display: grid;
+  gap: 12px;
+  padding: 0 24px 24px;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.export-dialog .dialog-body p,
+.export-dialog .dialog-body label,
+.export-dialog .export-output {
+  margin: 0;
+}
+.export-dialog .export-resolution {
+  display: grid;
   gap: 8px;
   cursor: pointer;
 }
-.export-history article {
+.export-dialog select {
+  height: 44px;
+  padding: 0 12px;
+}
+.export-dialog select,
+.export-dialog button,
+.export-dialog a,
+.export-dialog summary {
+  cursor: pointer;
+  outline: none;
+  box-shadow: none;
+}
+.export-dialog select:focus,
+.export-dialog select:focus-visible,
+.export-dialog button:focus-visible,
+.export-dialog a:focus-visible,
+.export-dialog summary:focus-visible {
+  outline: none;
+  box-shadow: none;
+  border-color: var(--accent);
+}
+.export-dialog :disabled {
+  cursor: not-allowed;
+}
+.export-dialog .export-output {
   display: grid;
-  gap: 8px;
-  padding: 16px 0;
-  border-bottom: 1px solid var(--line);
+  gap: 6px;
+  list-style: disc;
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.export-dialog .export-output strong {
+  font-weight: 500;
+}
+.export-dialog .export-destination,
+.export-dialog .field-help {
+  font-size: 13px;
   overflow-wrap: anywhere;
 }
-.export-history article .button {
+.export-dialog .export-error {
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+.export-dialog .export-history {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+.export-dialog .export-history summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  list-style: none;
+}
+.export-dialog .export-history summary::-webkit-details-marker {
+  display: none;
+}
+.export-history summary > span {
+  flex: 1;
+}
+.export-history-open,
+.export-history[open] .export-history-closed {
+  display: none;
+}
+.export-history[open] .export-history-open {
+  display: block;
+}
+.export-dialog .export-history-content {
+  display: grid;
+  gap: 12px;
+  padding-top: 12px;
+}
+.export-dialog .export-history article {
+  display: grid;
+  gap: 8px;
+  padding: 0 0 12px;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.export-dialog .export-history article:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+.export-dialog .export-history article .button {
   justify-self: start;
+  white-space: normal;
+}
+.export-dialog > footer {
+  display: flex;
+  gap: 8px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+.export-dialog .button {
+  min-height: 44px;
+}
+@media (max-width: 600px) {
+  .export-dialog > header {
+    padding: 16px 16px 24px;
+  }
+  .export-dialog .dialog-body {
+    padding: 0 16px 16px;
+  }
+  .export-dialog > footer {
+    padding: 16px;
+  }
+  .export-dialog > footer > .button {
+    flex: 1;
+    min-width: 0;
+  }
 }

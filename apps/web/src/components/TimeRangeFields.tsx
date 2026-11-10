@@ -22,7 +22,9 @@ export function TimeRangeFields({
   duration,
   onStart,
   onEnd,
+  compact = false,
 }: {
+  compact?: boolean;
   start: TimeParts;
   end: TimeParts;
   duration: number;
@@ -83,21 +85,23 @@ export function TimeRangeFields({
           );
         })}
       </div>
-      <ul className="time-range-help">
-        <li>
-          Rentang tersedia: {frameLabel(0, duration)}–{frameLabel(maximum, duration)}
-        </li>
-        {Number.isFinite(a + b) && (
-          <>
-            <li>Waktu mulai: {frameLabel(a, duration)}</li>
-            <li>Waktu akhir: {frameLabel(b, duration)}</li>
-            <li>Durasi pilihan: {durationLabel(Math.max(0, b - a))}</li>
-          </>
-        )}
-        <li>Batas highlight: 10 detik–20 menit</li>
-        <li>Menit: 00–59; detik: 0 hingga kurang dari 60</li>
-        <li>Ketelitian: 30 fps</li>
-      </ul>
+      {!compact && (
+        <ul className="time-range-help">
+          <li>
+            Rentang tersedia: {frameLabel(0, duration)}–{frameLabel(maximum, duration)}
+          </li>
+          {Number.isFinite(a + b) && (
+            <>
+              <li>Waktu mulai: {frameLabel(a, duration)}</li>
+              <li>Waktu akhir: {frameLabel(b, duration)}</li>
+              <li>Durasi pilihan: {durationLabel(Math.max(0, b - a))}</li>
+            </>
+          )}
+          <li>Batas highlight: 10 detik–20 menit</li>
+          <li>Menit: 00–59; detik: 0 hingga kurang dari 60</li>
+          <li>Ketelitian: 30 fps</li>
+        </ul>
+      )}
       {!valid && Number.isFinite(a + b) && (
         <p role="alert">
           {b - a > 36000

@@ -255,6 +255,10 @@ def process_job(job_id):
                 "model": result["model"],
                 "peak_memory_bytes": result["peak_memory_bytes"],
             }
+        elif kind == "review_audio":
+            from .review_audio import prepare
+
+            result = prepare(pid, lambda: check(job_id), lambda **kw: update(job_id, **kw))
         elif kind == "editor_media":
             update(job_id, stage="Menyiapkan proxy, thumbnail, waveform", progress=10)
             result = prepare_editor(folder, lambda: check(job_id))

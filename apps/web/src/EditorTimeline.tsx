@@ -29,6 +29,7 @@ type Props = {
   audioAssets: AudioAsset[];
   plan: Plan;
   frame: number;
+  playing: boolean;
   seek: (n: number) => void;
   selection: Selection | null;
   select: (s: Selection) => void;
@@ -44,7 +45,8 @@ export function EditorTimeline(p: Props) {
     [snap, setSnap] = useState(true);
   const scroll = useRef<HTMLDivElement>(null),
     dragged = useRef(''),
-    moved = useRef(false);
+    moved = useRef(false),
+    followSuspended = useRef(false);
   const duration = total(p.plan),
     width = Math.max(650, (duration / 30) * zoom),
     rows = offsets(p.plan);
@@ -64,10 +66,35 @@ export function EditorTimeline(p: Props) {
       el.removeEventListener('scroll', update);
     };
   }, [width]);
+  // Manual navigation takes precedence until the next playback session.
+  useEffect(() => {
+    if (p.playing) followSuspended.current = false;
+  }, [p.playing]);
+  useEffect(() => {
+    const el = scroll.current;
+    if (!el || !p.playing || followSuspended.current) return;
+    const gutter = 100;
+    const available = el.clientWidth - gutter;
+    if (available <= 0) return;
+    const playhead = gutter + (p.frame / 30) * zoom;
+    const visibleX = playhead - el.scrollLeft;
+    const rightEdge = gutter + available * 0.85;
+    const leftEdge = gutter + Math.min(8, available * 0.05);
+    let target = el.scrollLeft;
+    if (visibleX > rightEdge) target = playhead - rightEdge;
+    else if (visibleX < leftEdge) target = playhead - gutter - available * 0.15;
+    target = clamp(target, 0, Math.max(0, el.scrollWidth - el.clientWidth));
+    // Change only horizontal scroll; page and track scroll positions stay put.
+    if (Math.abs(target - el.scrollLeft) >= 1) el.scrollLeft = target;
+  }, [p.frame, p.playing, zoom, width, horizontal.view]);
+  function suspendFollow() {
+    followSuspended.current = true;
+  }
   const scrollMax = Math.max(0, horizontal.full - horizontal.view),
     thumbRatio = Math.min(1, horizontal.view / horizontal.full);
   function dragScroll(e: React.PointerEvent<HTMLDivElement>) {
     if (e.button !== 0 || !scrollMax) return;
+    suspendFollow();
     e.preventDefault();
     const bar = e.currentTarget,
       rect = bar.getBoundingClientRect(),
@@ -307,14 +334,29 @@ export function EditorTimeline(p: Props) {
           />
         </label>
       </div>
-      <div className="timeline-scroll" id={scrollId} ref={scroll}>
+      <div
+        className="timeline-scroll"
+        id={scrollId}
+        ref={scroll}
+        onPointerDownCapture={suspendFollow}
+        onWheelCapture={(e) => {
+          if (e.deltaX || (e.shiftKey && e.deltaY)) suspendFollow();
+        }}
+        onKeyDownCapture={(e) => {
+          if (['ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'].includes(e.key))
+            suspendFollow();
+        }}
+      >
         <div className="timeline-content" style={{ width: width + 100 }}>
-          <div className="time-ruler" style={{ width, marginLeft: 100 }} onPointerDown={scrub}>
-            {Array.from({ length: Math.ceil(duration / 30 / 5) + 1 }, (_, i) => (
-              <span key={i} style={{ left: i * 5 * zoom }}>
-                {timecode(i * 150).slice(0, 5)}
-              </span>
-            ))}
+          <div className="timeline-ruler-row">
+            <div className="track-label" aria-hidden="true" />
+            <div className="time-ruler" style={{ width }} onPointerDown={scrub}>
+              {Array.from({ length: Math.ceil(duration / 30 / 5) + 1 }, (_, i) => (
+                <span key={i} style={{ left: i * 5 * zoom }}>
+                  {timecode(i * 150).slice(0, 5)}
+                </span>
+              ))}
+            </div>
           </div>
           <div
             className="track filter-track"
@@ -363,6 +405,70 @@ export function EditorTimeline(p: Props) {
                   />
                 </div>
               ))}
+            </div>
+          </div>
+          <div className="track transition-track">
+            <div className="track-label">Transisi</div>
+            <div className="track-body" style={{ width }}>
+              {boundaries(p.plan)
+                .filter(
+                  (e) =>
+                    (e.before && e.after) ||
+                    e.value.kind !== 'none' ||
+                    e.value.sound === 'camera_shutter',
+                )
+                .map((e) => {
+                  const Icon =
+                    e.value.kind === 'flash'
+                      ? Zap
+                      : e.value.kind === 'black'
+                        ? Blend
+                        : e.value.kind === 'crossfade'
+                          ? Layers2
+                          : Minus;
+                  return (
+                    <button
+                      key={e.id}
+                      className={
+                        'transition-boundary ' + (p.selection?.id === e.id ? 'selected' : '')
+                      }
+                      aria-label={'Transisi pada ' + timecode(e.frame)}
+                      title={
+                        (e.value.kind === 'none'
+                          ? 'Tanpa transisi'
+                          : e.value.kind === 'black'
+                            ? 'Pudar hitam'
+                            : e.value.kind === 'flash'
+                              ? 'Kilatan'
+                              : 'Crossfade') +
+                        ' · ' +
+                        timecode(e.frame)
+                      }
+                      style={{
+                        left: (e.frame / 30) * zoom,
+                        transform:
+                          e.frame === 0
+                            ? 'translateY(-50%)'
+                            : e.frame === duration
+                              ? 'translate(-100%, -50%)'
+                              : undefined,
+                      }}
+                      onPointerDown={(ev) => ev.stopPropagation()}
+                      onClick={() => {
+                        p.select({ kind: 'transition', segmentId: '', id: e.id });
+                        p.seek(Math.min(duration - 1, e.frame));
+                      }}
+                    >
+                      <Icon
+                        size={14}
+                        style={e.value.kind === 'none' ? { transform: 'rotate(90deg)' } : undefined}
+                      />
+                      {e.value.sound === 'camera_shutter' && (
+                        <Camera size={9} className="boundary-sound" />
+                      )}
+                    </button>
+                  );
+                })}
             </div>
           </div>
           {['Video', 'Audio sumber', 'Subtitle', 'Teks', 'Gambar', 'Audio tambahan'].map(
@@ -698,58 +804,6 @@ export function EditorTimeline(p: Props) {
               </div>
             ),
           )}
-          {boundaries(p.plan)
-            .filter(
-              (e) =>
-                (e.before && e.after) ||
-                e.value.kind !== 'none' ||
-                e.value.sound === 'camera_shutter',
-            )
-            .map((e) => {
-              const Icon =
-                e.value.kind === 'flash'
-                  ? Zap
-                  : e.value.kind === 'black'
-                    ? Blend
-                    : e.value.kind === 'crossfade'
-                      ? Layers2
-                      : Minus;
-              return (
-                <button
-                  key={e.id}
-                  className={'transition-boundary ' + (p.selection?.id === e.id ? 'selected' : '')}
-                  aria-label={'Transisi pada ' + timecode(e.frame)}
-                  title={
-                    (e.value.kind === 'none'
-                      ? 'Tanpa transisi'
-                      : e.value.kind === 'black'
-                        ? 'Pudar hitam'
-                        : e.value.kind === 'flash'
-                          ? 'Kilatan'
-                          : 'Crossfade') +
-                    ' · ' +
-                    timecode(e.frame)
-                  }
-                  style={{
-                    left: 100 + (e.frame / 30) * zoom,
-                    top: 32 + Math.max(48, laneEnds.length * 32 + 8) + 8,
-                  }}
-                  onPointerDown={(ev) => ev.stopPropagation()}
-                  onClick={() => {
-                    p.select({ kind: 'transition', segmentId: '', id: e.id });
-                    p.seek(Math.min(duration - 1, e.frame));
-                  }}
-                >
-                  <Icon
-                    size={14}
-                    style={e.value.kind === 'none' ? { transform: 'rotate(90deg)' } : undefined}
-                  />
-                  {e.value.sound === 'camera_shutter' && (
-                    <Camera size={9} className="boundary-sound" />
-                  )}
-                </button>
-              );
-            })}
           <div
             className="playhead"
             style={{ left: 100 + (p.frame / 30) * zoom }}
@@ -798,6 +852,7 @@ export function EditorTimeline(p: Props) {
                     ? -el.clientWidth
                     : 0;
           if (delta || e.key === 'Home' || e.key === 'End') {
+            suspendFollow();
             e.preventDefault();
             e.stopPropagation();
             el.scrollLeft =

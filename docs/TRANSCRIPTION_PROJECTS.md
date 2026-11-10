@@ -99,3 +99,12 @@ Modern subtitle motion uses smooth acceleration, 96–100% zoom and 12% font-siz
 Tindakan reset, simpan, dan proses berada pada header sebagai tombol ikon. Panel subtitle dan transisi memakai accordion beranimasi dengan konten tertutup nonaktif. Kartu menggunakan CSS Grid rata kiri, tiga/dua/satu kolom sesuai lebar komponen. Transisi selalu terlihat tetapi nonaktif pada mode Podcast; pergantian mode mempertahankan draft Mix.
 
 Contoh transisi memakai aset bawaan dua foto kucing, fungsi bobot transisi studio, dan pola Kilatan yang sama. Preview visual bersifat senyap dan berbagi satu pemutar aktif dengan subtitle. Audisi shutter hanya diputar melalui klik pengguna, memakai katalog serta cache audio yang sama dengan studio, dan dihentikan ketika panel/halaman tidak aktif.
+
+
+### Revisi audio melalui modal
+
+Detail highlight menampilkan pemutar ringkas untuk rentang tersimpan. Revisi waktu dilakukan melalui modal Revisi bagian melalui audio; pengubahan judul/ringkasan tersedia terpisah melalui Ubah informasi. Transkrip bersifat statis, memakai pagination manual, dan dimuat ulang setelah rentang berhasil disimpan. Playback tidak menggerakkan scroll atau halaman transkrip.
+
+Area dengar modal dimulai sepanjang 10 menit di sekitar highlight, menyesuaikan sumber serta highlight yang lebih panjang, maksimal 20 menit. Area dengar dan pilihan highlight adalah dua rentang terpisah (masing-masing 10 detik–20 menit). Pergantian area yang tidak memuat pilihan mengosongkan draft pilihan; pengguna harus menentukan rentang baru, tanpa mengubah highlight tersimpan. Simpan memakai revisi yang diambil ketika modal dibuka, dan Batal mempertahankan data tersimpan.
+
+HTTP Range dan cache waveform bertingkat tetap dipakai. Waveform hanya diminta saat modal terbuka dan hanya untuk area/zoom yang ditampilkan; overview seluruh sumber tidak dimuat. Cache browser maksimal 8 MiB. Persiapan audio memakai endpoint review-audio dan antrean yang sudah ada; tidak ada endpoint atau tabel baru. Parameter position pada transcript-range dipertahankan untuk kompatibilitas, namun UI detail tidak menggunakannya.

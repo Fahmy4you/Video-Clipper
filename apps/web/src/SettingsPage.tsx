@@ -8,12 +8,111 @@ import {
   KeyRound,
   Film,
   ChevronDown,
+  Download,
+  FolderOpen,
 } from 'lucide-react';
 import { api, type Health } from './api';
 import { Button } from './components/ui/button';
 import { ThemeSelect } from './components/Theme';
 import './queue.css';
 import { RouterSettings } from './components/RouterSettings';
+type ExportConfig = {
+  mode: string;
+  local_dir: string | null;
+  ready: boolean;
+  error: string | null;
+};
+function ExportSettings() {
+  const [config, setConfig] = useState<ExportConfig | null>(null);
+  const [busy, setBusy] = useState(true);
+  const [error, setError] = useState('');
+  async function reload() {
+    setBusy(true);
+    setError('');
+    try {
+      setConfig(await api<ExportConfig>('/export-config'));
+    } catch (e) {
+      setConfig(null);
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  useEffect(() => {
+    void reload();
+  }, []);
+  const local = config?.mode === 'local';
+  const known = local || config?.mode === 'global';
+  return (
+    <section
+      className="panel settings-services settings-export"
+      aria-labelledby="export-settings-title"
+    >
+      <header className="section-heading">
+        <div>
+          <h2 id="export-settings-title">Penyimpanan hasil ekspor</h2>
+          <p>Mode yang sedang digunakan oleh backend.</p>
+        </div>
+        <Button
+          variant="secondary"
+          aria-label="Periksa mode ekspor"
+          disabled={busy}
+          onClick={() => void reload()}
+        >
+          <RefreshCw size={16} className={busy ? 'spin' : ''} />
+          Periksa ulang
+        </Button>
+      </header>
+      <div className="service-row" role="status">
+        <span className="service-icon" aria-hidden="true">
+          {local ? <FolderOpen size={20} /> : <Download size={20} />}
+        </span>
+        <div>
+          <strong>
+            {config
+              ? local
+                ? 'Lokal'
+                : known
+                  ? 'Global'
+                  : 'Mode tidak dikenal'
+              : busy
+                ? 'Memeriksa mode ekspor…'
+                : 'Mode belum diketahui'}
+          </strong>
+          {known && (
+            <p>
+              {local
+                ? 'Hasil ekspor disimpan otomatis ke folder tujuan.'
+                : 'Hasil ekspor diunduh melalui browser.'}
+            </p>
+          )}
+        </div>
+        {config && (
+          <span className={'service-status ' + (config.ready && known ? 'ready' : 'pending')}>
+            {config.ready && known ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
+            {busy ? 'Memeriksa…' : config.ready && known ? 'Siap' : 'Perlu diperiksa'}
+          </span>
+        )}
+      </div>
+      {local && (
+        <div className="settings-export-folder">
+          <strong>Folder tujuan</strong>
+          <p>{config.local_dir || 'Folder tujuan belum diatur.'}</p>
+        </div>
+      )}
+      {(error || config?.error) && (
+        <p className="notice" role="alert">
+          <AlertCircle size={18} />
+          {error || config?.error}
+        </p>
+      )}
+      <p className="field-help">
+        Mode diatur melalui <code>EXPORT_MODE</code> di <code>.env</code>. Setelah mengubahnya,
+        restart backend dan worker, lalu periksa ulang.
+      </p>
+    </section>
+  );
+}
 export function SettingsPage() {
   const [health, setHealth] = useState<Health | null>(null),
     [error, setError] = useState(''),
@@ -71,6 +170,7 @@ export function SettingsPage() {
         </div>
         <ThemeSelect />
       </section>
+      <ExportSettings />
       <section className="panel settings-services">
         <header className="section-heading">
           <div>

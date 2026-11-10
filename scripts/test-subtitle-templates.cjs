@@ -2,7 +2,7 @@ require('./register-ts.cjs');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const cp = require('node:child_process');
-const { motionAt, modernStyle } = require('../apps/web/src/subtitleTemplates.ts');
+const { motionAt, modernStyle, readableAt } = require('../apps/web/src/subtitleTemplates.ts');
 const root = path.resolve(__dirname, '..');
 const cases = [];
 for (const motion of ['none', 'fade', 'zoom', 'zoom_fade', 'down', 'down_fade'])
@@ -27,6 +27,10 @@ cases.forEach((c, i) => {
   for (const key of ['opacity', 'scale', 'dy'])
     assert.ok(Math.abs(actual[key] - expected[i][key]) < 1e-10);
 });
+for (const end of [1, 2, 3, 6, 9, 90]) {
+  assert.ok(readableAt(0, end, 0) >= 0.7);
+  assert.equal(readableAt(0, end, end - 1, false), 1);
+}
 assert.equal(modernStyle().subtitle_template, 'sentence');
 assert.equal(modernStyle().subtitle_motion, 'none');
 console.log(cases.length + ' frontend/backend animation states and new-style defaults passed.');

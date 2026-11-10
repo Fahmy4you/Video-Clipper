@@ -6,15 +6,10 @@ import { durationLabel, mixCapacity } from './timeRange';
 import { createLucideIcon } from 'lucide-react';
 
 import { Transcript, type Proposal } from './ReviewHighlights';
+import { ReviewAudio } from './ReviewAudio';
 import { Button } from './components/ui/button';
 import { useConfirm } from './components/Ui';
-import {
-  TimeRangeFields,
-  partsFromFrame,
-  frameFromParts,
-  frameLabel,
-  validRange,
-} from './components/TimeRangeFields';
+import { frameLabel } from './components/TimeRangeFields';
 
 const Youtube = createLucideIcon('Youtube', [
   ['rect', { x: 2, y: 5, width: 20, height: 14, rx: 4, key: 'body' }],
@@ -57,13 +52,11 @@ export function ProposalDetail({
     [error, setError] = useState('');
   const [title, setTitle] = useState(p.title),
     [summary, setSummary] = useState(p.summary);
-  const [start, setStart] = useState(partsFromFrame(p.start)),
-    [end, setEnd] = useState(partsFromFrame(p.end));
+  const [audioDirty, setAudioDirty] = useState(false);
   const [base, setBase] = useState(p.revision);
-  const a = editing ? frameFromParts(start) : p.start,
-    b = editing ? frameFromParts(end) : p.end;
-  const dirty =
-    editing && (title !== p.title || summary !== p.summary || a !== p.start || b !== p.end);
+  const a = p.start,
+    b = p.end;
+  const dirty = audioDirty || (editing && (title !== p.title || summary !== p.summary));
   const blocker = useBlocker(dirty);
   useEffect(() => {
     if (blocker.state !== 'blocked') return;
@@ -95,7 +88,7 @@ export function ProposalDetail({
     'waiting_network',
   ].includes(p.status);
   const changed = p.start !== p.original_start || p.end !== p.original_end;
-  const valid = !editing || validRange(start, end, project.duration);
+  const valid = true;
   const overlaps =
     rows.some((x) => x.id !== p.id && x.start < b && x.end > a) ||
     clips.some(
@@ -136,15 +129,13 @@ export function ProposalDetail({
               onClick={() => {
                 setTitle(p.title);
                 setSummary(p.summary);
-                setStart(partsFromFrame(p.start));
-                setEnd(partsFromFrame(p.end));
                 setBase(p.revision);
                 setEditing(true);
                 setError('');
               }}
             >
               <Pencil size={16} />
-              Revisi bagian
+              Ubah informasi
             </Button>
           )}
         </div>
@@ -195,19 +186,6 @@ export function ProposalDetail({
                 onChange={(e) => setSummary(e.target.value)}
               />
             </label>
-            {!!p.settings.mix_max_per_minute &&
-              p.settings.mix_max_per_minute > mixCapacity(b - a) && (
-                <p role="status">
-                  Batas sisipan akan disesuaikan dengan kapasitas durasi baru saat revisi disimpan.
-                </p>
-              )}
-            <TimeRangeFields
-              start={start}
-              end={end}
-              onStart={setStart}
-              onEnd={setEnd}
-              duration={project.duration}
-            />
             <div className="proposal-actions">
               <Button
                 type="button"
@@ -268,6 +246,14 @@ export function ProposalDetail({
           </a>
         )}
       </section>
+      <ReviewAudio
+        projectId={project.id}
+        proposal={p}
+        duration={project.duration}
+        refresh={refresh}
+        locked={pending || p.status === 'ready' || editing || busy}
+        onDirty={setAudioDirty}
+      />
       <section className="panel proposal-section">
         <h2>Alasan dipilih</h2>
         <p className="detail-prose">{p.reason}</p>
@@ -283,7 +269,7 @@ export function ProposalDetail({
         <h2>Transkrip sumber</h2>
         <p className="field-help">Baca saja · mengikuti rentang pilihan.</p>
         {valid ? (
-          <Transcript projectId={project.id} start={a} end={b} />
+          <Transcript projectId={project.id} start={p.start} end={p.end} />
         ) : (
           <p>Perbaiki rentang untuk melihat transkrip.</p>
         )}

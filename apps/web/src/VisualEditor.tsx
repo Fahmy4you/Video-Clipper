@@ -1802,6 +1802,7 @@ export function VisualEditor() {
           audioAssets={audioAssets}
           plan={plan}
           frame={frame}
+          playing={playing}
           seek={seek}
           selection={selection}
           select={select}

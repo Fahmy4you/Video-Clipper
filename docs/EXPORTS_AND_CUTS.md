@@ -8,7 +8,7 @@ Root .env:
 - EXPORT_LOCAL_DIR=C:/Documents/video-clips-ekspor: contoh Windows/WSL, wajib absolut, sudah ada, dapat ditulis.
 - Linux native dapat memakai /home/nama/Videos/exports.
 
-.env.example sengaja hanya berisi key dengan nilai kosong. Konfigurasi opsional yang kosong memakai default aplikasi. DATABASE_URL tetap harus diisi. Perubahan .env memerlukan restart backend dan worker; apikey.json tetap dapat dikelola tanpa restart.
+.env.example mencantumkan nilai default konfigurasi yang didukung beserta komentar bahasa Indonesia. DATABASE_URL, 9router_base_url, dan 9router_key sengaja kosong dan harus diisi sesuai lingkungan; kredensial asli hanya disimpan di .env. EXPORT_LOCAL_DIR boleh kosong untuk mode global. Konfigurasi backend opsional yang kosong tetap memakai default aplikasi. Perubahan .env memerlukan restart backend dan worker; apikey.json tetap dapat dikelola tanpa restart.
 
 Local selalu menunjuk filesystem komputer backend. Backend WSL menerjemahkan drive Windows menggunakan wslpath; backend Linux remote tidak dapat menulis drive C: pengunjung. Tidak ada path tujuan dari payload browser. Kesalahan konfigurasi hanya memblokir ekspor.
 

@@ -50,8 +50,17 @@ type Box = {
   word: Caption['words'][number];
   row: number;
   ascent: number;
+  descent: number;
 };
 const layouts = new WeakMap<CanvasRenderingContext2D, Map<string, Box[]>>();
+
+export function readableAt(start: number, end: number, frame: number, exit = true) {
+  const phase = Math.min(3, Math.floor((end - start) / 3));
+  if (!phase) return 1;
+  const entering = 0.7 + 0.3 * ease((frame - start) / phase);
+  const leaving = exit ? ease((end - 1 - frame) / phase) : 1;
+  return Math.min(entering, leaving);
+}
 
 export function motionAt(start: number, end: number, frame: number, motion: string) {
   const phase = Math.min(9, Math.floor((end - start) / 3));
@@ -59,7 +68,7 @@ export function motionAt(start: number, end: number, frame: number, motion: stri
   const leaving = phase ? ease((end - 1 - frame) / phase) : 1;
   const gain = Math.min(entering, leaving);
   return {
-    opacity: motion.includes('fade') || motion === 'fade' ? gain : 1,
+    opacity: motion.includes('fade') ? readableAt(start, end, frame) : 1,
     scale: motion.includes('zoom') ? 0.96 + 0.04 * gain : 1,
     dy: motion.includes('down') ? 0.12 * (leaving < 1 ? 1 - leaving : entering - 1) : 0,
   };
@@ -78,13 +87,13 @@ export function drawSubtitle(
   const words = mode === 'word' ? [caption.words[active]] : caption.words;
   const unit = mode === 'word' ? words[0] : caption;
   const group = motionAt(unit.start, unit.end, frame, style.subtitle_motion || 'none');
-  const size = (style.size * w) / 1080;
+  const size = Math.max(1, Math.round((style.size * w) / 1080));
   ctx.save();
   ctx.translate(style.x * w, style.y * h + group.dy * size);
   ctx.rotate((style.rotation * Math.PI) / 180);
   ctx.scale(group.scale, group.scale);
   ctx.font = `600 ${size}px "${style.font}"`;
-  ctx.textBaseline = 'top';
+  ctx.textBaseline = 'alphabetic';
   ctx.lineJoin = 'round';
   let cache = layouts.get(ctx);
   if (!cache) {
@@ -92,9 +101,13 @@ export function drawSubtitle(
     layouts.set(ctx, cache);
   }
   const key = JSON.stringify([words, style.font, size, style.width * w, style.align]);
-  let boxes = cache.get(key);
+  const fontsReady = ctx.canvas.ownerDocument?.fonts.check(ctx.font) ?? true;
+  let boxes = fontsReady ? cache.get(key) : undefined;
   if (!boxes) {
-    const space = ctx.measureText(' ').width,
+    const metrics = ctx.measureText('ÁÉHgyp'),
+      ascent = metrics.actualBoundingBoxAscent,
+      descent = metrics.actualBoundingBoxDescent,
+      space = ctx.measureText(' ').width,
       limit = style.width * w;
     const lines: { text: string; width: number; word: (typeof words)[number] }[][] = [[]];
     let width = 0;
@@ -121,20 +134,23 @@ export function drawSubtitle(
         style.align === 'center' ? -tw / 2 : style.align === 'left' ? -limit / 2 : limit / 2 - tw;
       const y = (-lines.length * size * 1.25) / 2 + row * size * 1.25 + size * 0.1;
       line.forEach((t) => {
-        boxes!.push({ ...t, x, y, row, ascent: ctx.measureText(t.text).actualBoundingBoxAscent });
+        boxes!.push({ ...t, x, y: y + ascent, row, ascent, descent });
         x += t.width + space;
       });
     });
     if (cache.size >= 32) cache.delete(cache.keys().next().value!);
-    cache.set(key, boxes);
+    if (fontsReady) cache.set(key, boxes);
   }
   ctx.globalAlpha = style.opacity * group.opacity;
   if (mode === 'background' && active >= 0) {
     const target = boxes.find((b) => b.word.id === caption.words[active]?.id);
     const previous = boxes.find((b) => b.word.id === caption.words[active - 1]?.id);
     if (target) {
-      const phase = Math.max(0, Math.min(6, target.word.end - target.word.start - 1));
-      const t = phase ? ease((frame - target.word.start) / phase) : 1;
+      const duration = target.word.end - target.word.start;
+      const phase = duration < 3 ? 0 : Math.min(3, duration - 1);
+      const t = phase
+        ? 1 - (1 - Math.max(0, Math.min(1, (frame - target.word.start) / phase))) ** 3
+        : 1;
       const same =
         previous && previous.row === target.row && previous.word.end === target.word.start;
       const x = same ? previous.x + (target.x - previous.x) * t : target.x;
@@ -145,9 +161,9 @@ export function drawSubtitle(
       ctx.beginPath();
       ctx.roundRect(
         x - size * 0.12,
-        target.y - size * 0.08,
+        target.y - target.ascent - size * 0.08,
         width + size * 0.24,
-        size * 1.2,
+        target.ascent + target.descent + size * 0.16,
         size * 0.15,
       );
       ctx.fill();
@@ -162,8 +178,12 @@ export function drawSubtitle(
         ? ease((frame - box.word.start) / phase)
         : 1;
     ctx.save();
-    ctx.globalAlpha *= t;
-    const y = box.y + (mode === 'reveal_up' ? 1 : -1) * (1 - t) * size * 0.12 + box.ascent;
+    const wordOpacity =
+      mode === 'reveal' || mode === 'reveal_up'
+        ? readableAt(box.word.start, box.word.end, frame, false)
+        : 1;
+    ctx.globalAlpha = style.opacity * Math.min(group.opacity, wordOpacity);
+    const y = box.y + (mode === 'reveal_up' ? 1 : -1) * (1 - t) * size * 0.12;
     ctx.lineWidth = ((style.outline * w) / 1080) * 2;
     ctx.strokeStyle = '#101010';
     if (style.outline) ctx.strokeText(box.text, box.x, y);

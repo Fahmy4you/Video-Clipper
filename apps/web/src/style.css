@@ -1478,3 +1478,170 @@ pre {
   align-items: center;
   gap: 6px;
 }
+
+.settings-export .service-row {
+  flex-wrap: wrap;
+}
+.settings-export .service-icon {
+  flex-shrink: 0;
+}
+.settings-export .service-row > div {
+  flex: 1 1 160px;
+}
+.settings-export-folder {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+  overflow-wrap: anywhere;
+}
+.settings-export-folder strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+.settings-export-folder p {
+  font-size: 13px;
+  color: var(--muted);
+}
+.settings-export .notice {
+  overflow-wrap: anywhere;
+}
+
+.settings-export > .field-help {
+  display: block;
+}
+
+/* Panel koneksi 9Router di Pengaturan. */
+.settings-router .section-heading {
+  align-items: flex-start;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+.settings-router .section-heading > div {
+  min-width: 0;
+}
+.settings-router h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+.settings-router h2 svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.settings-router .section-heading p {
+  margin: 8px 0 0;
+  line-height: 1.65;
+}
+.settings-router button,
+.settings-router .router-dashboard {
+  min-height: 44px;
+  cursor: pointer;
+}
+.settings-router button:disabled {
+  cursor: not-allowed;
+}
+.settings-router .section-heading button {
+  flex-shrink: 0;
+}
+.router-content {
+  display: grid;
+  gap: 20px;
+  border-top: 1px solid var(--line);
+  padding-top: 20px;
+  min-width: 0;
+}
+.router-content p,
+.router-content dl,
+.router-content dd,
+.router-content h3,
+.router-content ul {
+  margin: 0;
+}
+.router-content p,
+.router-content dd {
+  overflow-wrap: anywhere;
+}
+.router-connection {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+}
+.router-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.router-status svg {
+  flex-shrink: 0;
+}
+.router-status.is-connected {
+  color: var(--success);
+}
+.router-updated {
+  color: var(--muted);
+  font-size: 12px;
+}
+.router-details {
+  display: grid;
+  gap: 12px;
+  font-size: 13px;
+}
+.router-details > div {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  gap: 16px;
+}
+.router-details dt {
+  color: var(--muted);
+}
+.router-catalog {
+  display: grid;
+  gap: 8px;
+}
+.router-catalog h3 {
+  font-size: 13px;
+  font-weight: 500;
+}
+.router-catalog p,
+.router-help {
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+.router-catalog ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0;
+  list-style: none;
+}
+.router-catalog li {
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+.router-help {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+.router-dashboard {
+  justify-self: start;
+}
+@media (max-width: 600px) {
+  .settings-router .section-heading {
+    flex-wrap: wrap;
+  }
+  .router-details > div {
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: 12px;
+  }
+}

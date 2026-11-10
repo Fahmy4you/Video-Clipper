@@ -22,13 +22,22 @@ def ease(x):
     return x * x * x * (x * (x * 6 - 15) + 10)
 
 
+def readable_at(start, end, frame, exit=True):
+    phase = min(3, (end - start) // 3)
+    if not phase:
+        return 1
+    entering = 0.7 + 0.3 * ease((frame - start) / phase)
+    leaving = ease((end - 1 - frame) / phase) if exit else 1
+    return min(entering, leaving)
+
+
 def motion_at(start, end, frame, motion):
     phase = min(9, (end - start) // 3)
     entering = ease((frame - start) / phase) if phase else 1
     leaving = ease((end - 1 - frame) / phase) if phase else 1
     gain = min(entering, leaving)
     return {
-        "opacity": gain if "fade" in motion else 1,
+        "opacity": readable_at(start, end, frame) if "fade" in motion else 1,
         "scale": 0.96 + 0.04 * gain if "zoom" in motion else 1,
         "dy": 0.12 * (1 - leaving if leaving < 1 else entering - 1) if "down" in motion else 0,
     }
@@ -45,8 +54,10 @@ def text_image(caption, style, frame, w, h):
         words = [words[active]]
     unit = words[0] if mode == "word" else caption
     group = motion_at(unit["start"], unit["end"], frame, style.get("subtitle_motion", "none"))
-    size = max(1, round(style["size"] * w / 1080))
+    size = max(1, int(style["size"] * w / 1080 + 0.5))
     font = font_for(style["font"], size)
+    _, top, _, bottom = font.getbbox("ÁÉHgyp", anchor="ls")
+    ascent, descent = -top, bottom
     space = text_width(style["font"], size, " ")
     limit = style["width"] * w
     lines = [[]]
@@ -76,14 +87,19 @@ def text_image(caption, style, frame, w, h):
         )
         y = -len(lines) * size * 1.25 / 2 + row * size * 1.25 + size * 0.1
         for b in line:
-            boxes.append(dict(**b, x=x + style["x"] * w, y=y + style["y"] * h, row=row))
+            boxes.append(dict(**b, x=x + style["x"] * w, y=y + ascent + style["y"] * h, row=row))
             x += b["width"] + space
     if mode == "background" and active >= 0:
         target = next((b for b in boxes if b["index"] == active), None)
         previous = next((b for b in boxes if b["index"] == active - 1), None)
         if target:
-            phase = max(0, min(6, target["word"]["end"] - target["word"]["start"] - 1))
-            t = ease((frame - target["word"]["start"]) / phase) if phase else 1
+            duration = target["word"]["end"] - target["word"]["start"]
+            phase = 0 if duration < 3 else min(3, duration - 1)
+            t = (
+                1 - (1 - max(0, min(1, (frame - target["word"]["start"]) / phase))) ** 3
+                if phase
+                else 1
+            )
             same = (
                 previous
                 and previous["row"] == target["row"]
@@ -100,15 +116,18 @@ def text_image(caption, style, frame, w, h):
             ld.rounded_rectangle(
                 (
                     x - size * 0.12,
-                    target["y"] - size * 0.08,
+                    target["y"] - ascent - size * 0.08,
                     x + tw + size * 0.12,
-                    target["y"] + size * 1.12,
+                    target["y"] + descent + size * 0.08,
                 ),
                 radius=size * 0.15,
                 fill=style.get("background", "#FACC15"),
             )
+            background_alpha = group["opacity"]
             if previous and previous["row"] != target["row"]:
-                layer.putalpha(layer.getchannel("A").point(lambda p, t=t: round(p * t)))
+                background_alpha *= t
+            if background_alpha != 1:
+                layer.putalpha(layer.getchannel("A").point(lambda p: round(p * background_alpha)))
             canvas.alpha_composite(layer)
     for box in boxes:
         word = box["word"]
@@ -132,10 +151,16 @@ def text_image(caption, style, frame, w, h):
             else style["color"],
             stroke_width=round(style["outline"] * w / 1080),
             stroke_fill="#101010",
-            anchor="lt",
+            anchor="ls",
         )
-        if t != 1:
-            layer.putalpha(layer.getchannel("A").point(lambda p, t=t: round(p * t)))
+        word_opacity = (
+            readable_at(word["start"], word["end"], frame, exit=False)
+            if mode in ("reveal", "reveal_up")
+            else 1
+        )
+        opacity = min(group["opacity"], word_opacity)
+        if opacity != 1:
+            layer.putalpha(layer.getchannel("A").point(lambda p: round(p * opacity)))
         canvas.alpha_composite(layer)
     scale = group["scale"]
     cx, cy = style["x"] * w, style["y"] * h
@@ -157,7 +182,7 @@ def text_image(caption, style, frame, w, h):
         canvas = canvas.rotate(
             -style["rotation"], resample=Image.Resampling.BICUBIC, center=(cx, cy)
         )
-    alpha = style["opacity"] * group["opacity"]
+    alpha = style["opacity"]
     if alpha != 1:
         canvas.putalpha(canvas.getchannel("A").point(lambda p: round(p * alpha)))
     return canvas

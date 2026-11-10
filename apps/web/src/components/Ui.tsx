@@ -76,6 +76,7 @@ export function Dialog({
   description,
   children,
   footer,
+  className = '',
 }: {
   open: boolean;
   onClose: () => void;
@@ -83,6 +84,7 @@ export function Dialog({
   description?: string;
   children?: ReactNode;
   footer?: ReactNode;
+  className?: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null),
     id = useId();
@@ -93,7 +95,7 @@ export function Dialog({
   return createPortal(
     <dialog
       ref={ref}
-      className="ui-dialog"
+      className={'ui-dialog ' + className}
       aria-labelledby={id}
       aria-describedby={description ? id + '-description' : undefined}
       onCancel={(e) => {

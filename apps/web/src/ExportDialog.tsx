@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Download, History, Loader2 } from 'lucide-react';
+import { useId, useRef, useState } from 'react';
+import { ChevronDown, ChevronRight, Download, History, Loader2 } from 'lucide-react';
 import { Dialog } from './components/Ui';
 import { isPending, jobLabel } from './components/QueueStatus';
 import { formats, type Plan } from './editorModel';
@@ -25,6 +25,8 @@ export function ExportDialog({
   const [resolution, setResolution] = useState(1080),
     [busy, setBusy] = useState(false),
     [error, setError] = useState('');
+  const submitting = useRef(false);
+  const resolutionId = useId();
   const f = formats.find((f) => f.id === ratio) || formats[0],
     width = (f.width * resolution) / 1080,
     height = (f.height * resolution) / 1080;
@@ -33,6 +35,7 @@ export function ExportDialog({
     <Dialog
       open={open}
       onClose={onClose}
+      className="export-dialog"
       title="Ekspor video"
       description="Pilih resolusi MP4 sesuai kebutuhan."
       footer={
@@ -42,8 +45,11 @@ export function ExportDialog({
           </button>
           <button
             className="button primary"
+            aria-label={busy ? 'Memulai ekspor…' : 'Mulai ekspor'}
             disabled={busy || !config?.ready || !plan}
             onClick={async () => {
+              if (submitting.current) return;
+              submitting.current = true;
               setBusy(true);
               setError('');
               try {
@@ -51,27 +57,45 @@ export function ExportDialog({
               } catch (e) {
                 setError((e as Error).message);
               } finally {
+                submitting.current = false;
                 setBusy(false);
               }
             }}
           >
-            {busy ? <Loader2 size={16} className="spin" /> : <Download size={16} />}Mulai ekspor
+            {busy ? (
+              <Loader2 size={16} className="spin" aria-hidden="true" />
+            ) : (
+              <Download size={16} aria-hidden="true" />
+            )}
+            <span role="status">{busy ? 'Memulai ekspor…' : 'Mulai ekspor'}</span>
           </button>
         </>
       }
     >
-      <label className="export-resolution">
-        Resolusi
-        <select value={resolution} onChange={(e) => setResolution(+e.target.value)}>
+      <div className="export-resolution">
+        <label htmlFor={resolutionId}>Resolusi</label>
+        <select
+          id={resolutionId}
+          value={resolution}
+          onChange={(e) => setResolution(+e.target.value)}
+        >
           <option value={360}>360p — ringan, cek hasil edit</option>
           <option value={720}>720p — sedang</option>
           <option value={1080}>1080p — tinggi, hasil akhir</option>
         </select>
-      </label>
-      <p>
-        {width} × {height} px · {ratio} · 30 fps
-      </p>
-      <p className="muted">
+      </div>
+      <ul className="export-output" aria-label="Informasi hasil ekspor">
+        <li>
+          <strong>Dimensi:</strong> {width} × {height} px
+        </li>
+        <li>
+          <strong>Rasio:</strong> {ratio}
+        </li>
+        <li>
+          <strong>Frame rate:</strong> 30 fps
+        </li>
+      </ul>
+      <p className="export-destination muted">
         {config?.mode === 'local'
           ? 'Tersimpan otomatis di ' + config.local_dir
           : 'MP4 diunduh otomatis melalui browser setelah selesai.'}
@@ -82,46 +106,54 @@ export function ExportDialog({
           membutuhkan waktu cukup lama.
         </p>
       )}
-      {(error || config?.error) && <p role="alert">{error || config?.error}</p>}
+      {(error || config?.error) && (
+        <p className="export-error" role="alert">
+          {error || config?.error}
+        </p>
+      )}
       <details className="export-history">
         <summary>
           <History size={16} />
-          Riwayat ekspor ({jobs.length})
+          <span>Riwayat ekspor ({jobs.length})</span>
+          <ChevronRight size={16} className="export-history-closed" aria-hidden="true" />
+          <ChevronDown size={16} className="export-history-open" aria-hidden="true" />
         </summary>
-        {jobs.length === 0 && <p className="muted">Belum ada ekspor.</p>}
-        {jobs.map((j) => (
-          <article key={j.id}>
-            <strong>
-              {j.kind === 'preview'
-                ? 'Arsip preview · resolusi rendah'
-                : (j.result.resolution || j.payload.resolution || 1080) + 'p'}{' '}
-              · revisi {j.result.revision || (j.payload.revision as number)}
-            </strong>
-            <span>
-              {isPending(j)
-                ? jobLabel(j) + ' · ' + j.progress + '%'
-                : j.status === 'succeeded'
-                  ? j.result.local_path
-                    ? 'Tersimpan di ' + j.result.local_path
-                    : 'Siap diunduh'
-                  : j.error || jobLabel(j)}
-            </span>
-            {j.status === 'succeeded' && (
-              <a
-                className="button secondary"
-                href={
-                  j.kind === 'preview'
-                    ? j.result.url
-                    : j.result.download_url || '/api/exports/' + j.id + '/download'
-                }
-                download
-              >
-                <Download size={14} />
-                {j.kind === 'preview' ? 'Unduh arsip preview' : 'Unduh MP4'}
-              </a>
-            )}
-          </article>
-        ))}
+        <div className="export-history-content">
+          {jobs.length === 0 && <p className="muted">Belum ada ekspor.</p>}
+          {jobs.map((j) => (
+            <article key={j.id}>
+              <strong>
+                {j.kind === 'preview'
+                  ? 'Arsip preview · resolusi rendah'
+                  : (j.result.resolution || j.payload.resolution || 1080) + 'p'}{' '}
+                · revisi {j.result.revision || (j.payload.revision as number)}
+              </strong>
+              <span>
+                {isPending(j)
+                  ? jobLabel(j) + ' · ' + j.progress + '%'
+                  : j.status === 'succeeded'
+                    ? j.result.local_path
+                      ? 'Tersimpan di ' + j.result.local_path
+                      : 'Siap diunduh'
+                    : j.error || jobLabel(j)}
+              </span>
+              {j.status === 'succeeded' && (
+                <a
+                  className="button secondary"
+                  href={
+                    j.kind === 'preview'
+                      ? j.result.url
+                      : j.result.download_url || '/api/exports/' + j.id + '/download'
+                  }
+                  download
+                >
+                  <Download size={14} />
+                  {j.kind === 'preview' ? 'Unduh arsip preview' : 'Unduh MP4'}
+                </a>
+              )}
+            </article>
+          ))}
+        </div>
       </details>
     </Dialog>
   );

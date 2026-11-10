@@ -426,6 +426,7 @@ def transcript_range(
     offset: int = 0,
     limit: int = 100,
     s=Depends(session),
+    position: float | None = None,
 ):
     project = lookup(s, Project, pid)
     if start < 0 or offset < 0 or not 1 <= limit <= 200:
@@ -443,6 +444,13 @@ def transcript_range(
             groups.append({"start": w["start"], "end": w["end"], "words": []})
         groups[-1]["words"].append(w["text"])
         groups[-1]["end"] = w["end"]
+    if position is not None:
+        if not math.isfinite(position) or position < 0 or position > project.duration:
+            raise HTTPException(422, "Posisi transkrip tidak valid.")
+        index = next(
+            (i for i, g in enumerate(groups) if g["end"] > position), max(0, len(groups) - 1)
+        )
+        offset = index // limit * limit
     return {
         "groups": [
             {"start": g["start"], "end": g["end"], "text": " ".join(g["words"])}

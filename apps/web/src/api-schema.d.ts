@@ -989,6 +989,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{pid}/review-audio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Metadata */
+        get: operations["metadata_api_projects__pid__review_audio_get"];
+        put?: never;
+        /** Request Prepare */
+        post: operations["request_prepare_api_projects__pid__review_audio_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{pid}/review-audio/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Media */
+        get: operations["media_api_projects__pid__review_audio_media_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{pid}/review-audio/waveform": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Waveform */
+        get: operations["waveform_api_projects__pid__review_audio_waveform_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1049,6 +1101,25 @@ export interface components {
              */
             volume: number;
             fade?: components["schemas"]["Fade"];
+        };
+        /** AudioState */
+        AudioState: {
+            /** Audio Status */
+            audio_status: string;
+            /** Waveform Status */
+            waveform_status: string;
+            /** Duration */
+            duration: number;
+            /** Audio Url */
+            audio_url?: string | null;
+            /** Version */
+            version?: string | null;
+            /** Job */
+            job?: {
+                [key: string]: unknown;
+            } | null;
+            /** Error */
+            error?: string | null;
         };
         /** Body_upload_api_video_clips_post */
         Body_upload_api_video_clips_post: {
@@ -2293,6 +2364,20 @@ export interface components {
              */
             subtitle_animation: "none" | "soft_zoom";
         };
+        /** Waveform */
+        Waveform: {
+            /** Start */
+            start: number;
+            /** Step */
+            step: number;
+            /** Peaks */
+            peaks: [
+                number,
+                number
+            ][];
+            /** Version */
+            version: string;
+        };
         /** Word */
         Word: {
             /** Start */
@@ -3021,6 +3106,7 @@ export interface operations {
                 end?: number | null;
                 offset?: number;
                 limit?: number;
+                position?: number | null;
             };
             header?: never;
             path: {
@@ -4561,6 +4647,134 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ClipView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    metadata_api_projects__pid__review_audio_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AudioState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    request_prepare_api_projects__pid__review_audio_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AudioState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    media_api_projects__pid__review_audio_media_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    waveform_api_projects__pid__review_audio_waveform_get: {
+        parameters: {
+            query?: {
+                start?: number;
+                end?: number | null;
+                points?: number;
+            };
+            header?: never;
+            path: {
+                pid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Waveform"];
                 };
             };
             /** @description Validation Error */

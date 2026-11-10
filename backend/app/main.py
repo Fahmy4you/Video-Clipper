@@ -1071,3 +1071,8 @@ def apply_subtitles(id: str, body: SubtitleApplyRequest, s: DBSession = Depends(
     c.revision += 1
     s.commit()
     return serialize(c)
+
+
+from .review_audio import router as review_audio_router
+
+app.include_router(review_audio_router)

@@ -1,0 +1,246 @@
+/* Scoped to the studio collection picker, not the source trimming dialog. */
+.source-modal.broll-picker-modal {
+  width: min(1080px, calc(100vw - 48px));
+  height: min(820px, calc(100dvh - 48px));
+  max-height: calc(100dvh - 48px);
+  padding: 24px;
+  overflow: hidden;
+}
+.source-modal.broll-picker-modal[open] {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 16px;
+}
+.broll-picker-modal > header,
+.broll-picker-modal .broll-search,
+.broll-picker-modal > footer {
+  margin: 0;
+}
+.broll-picker-modal > header > button {
+  min-width: 44px;
+  min-height: 44px;
+}
+.broll-picker-modal > footer {
+  padding-top: 16px;
+}
+.broll-picker-modal .broll-picker-list {
+  display: block;
+  min-height: 0;
+  max-height: none;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}
+.source-modal.broll-picker-modal .broll-choice {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 16px;
+  height: auto;
+  min-height: min-content;
+  padding: 16px;
+}
+.broll-picker-modal .broll-choice > div {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.broll-picker-modal .broll-choice p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.broll-picker-modal .broll-choice-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.broll-picker-modal .source-owner-label {
+  margin: 0;
+  line-height: 1.5;
+}
+.broll-picker-modal .broll-tags {
+  line-height: 1.5;
+}
+.broll-picker-modal .broll-short {
+  color: var(--danger);
+}
+.broll-picker-modal button:disabled {
+  cursor: not-allowed;
+}
+.broll-filter-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.broll-filter-toolbar > span {
+  color: var(--muted);
+  font-size: 12px;
+  margin-left: auto;
+}
+.broll-filter-toolbar button {
+  min-height: 44px;
+}
+.broll-filter-toolbar .is-active {
+  border-color: var(--accent);
+  color: var(--link);
+}
+.broll-filter-panel {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 8px 24px #0003;
+  overflow: hidden;
+}
+.broll-filter-panel:popover-open {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.broll-filter-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.broll-filter-search > svg {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.broll-filter-options {
+  overflow: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+  max-height: 240px;
+}
+.source-modal .broll-filter-options label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 8px;
+  min-height: 44px;
+  margin: 0;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+.broll-filter-options label:hover {
+  background: var(--surface-alt);
+}
+.source-modal .broll-filter-options input[type='checkbox'] {
+  appearance: auto;
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  flex: 0 0 16px;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+.broll-filter-options span {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.broll-filter-footer {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+}
+.broll-filter-footer button {
+  min-height: 44px;
+  font-size: 12px;
+}
+.broll-picker-modal button:focus-visible,
+.broll-filter-options label:has(:focus-visible) {
+  outline: none;
+  box-shadow: none;
+  border-color: var(--accent);
+}
+.broll-filter-options label:has(:focus-visible) {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.broll-picker-modal input:not([type='checkbox']) {
+  cursor: text;
+}
+.broll-picker-modal button {
+  cursor: pointer;
+}
+.broll-picker-modal button:disabled {
+  cursor: not-allowed;
+}
+@media (max-width: 700px) {
+  .source-modal.broll-picker-modal {
+    width: calc(100vw - 24px);
+    height: calc(100dvh - 24px);
+    max-height: calc(100dvh - 24px);
+    padding: 16px;
+  }
+  .source-modal.broll-picker-modal .broll-choice {
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: 12px;
+    padding: 16px;
+  }
+  .broll-picker-modal .broll-choice > img {
+    width: 72px;
+    height: 56px;
+  }
+  .broll-picker-modal .broll-choice > .broll-choice-duration {
+    display: none;
+  }
+  .broll-picker-modal .broll-choice strong {
+    font-size: 13px;
+  }
+  .broll-picker-modal .broll-choice p {
+    display: block;
+  }
+  .broll-filter-toolbar > span {
+    margin-left: 0;
+  }
+}
+@media (max-height: 500px) {
+  .source-modal.broll-picker-modal {
+    overflow: auto;
+    grid-template-rows: auto auto minmax(120px, 1fr) auto;
+  }
+}
+
+/* Disabled footage still explains why it cannot fill the slot. */
+.source-modal.broll-picker-modal .broll-choice:disabled {
+  opacity: 1;
+  background: var(--surface-alt);
+}
+
+.broll-picker-modal .broll-filter-toolbar > .broll-search {
+  flex: 1 1 260px;
+  min-width: 0;
+  margin: 0;
+}
+.broll-picker-modal .broll-filter-toolbar .broll-search input {
+  min-height: 44px;
+}
+.broll-picker-modal .broll-filter-toolbar .broll-search > svg {
+  top: 14px;
+}
+@media (max-width: 700px) {
+  .broll-picker-modal .broll-filter-toolbar > .broll-search {
+    flex-basis: 100%;
+  }
+}

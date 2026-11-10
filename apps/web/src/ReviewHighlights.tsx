@@ -112,17 +112,20 @@ export function Transcript({
 }) {
   const [rows, setRows] = useState<{ start: number; end: number; text: string }[]>([]),
     [offset, setOffset] = useState(0),
+    [shownOffset, setShownOffset] = useState(0),
     [total, setTotal] = useState(0),
     [error, setError] = useState(''),
     [loading, setLoading] = useState(false),
     generation = useRef(0);
-  useEffect(() => setOffset(0), [start, end]);
+  useEffect(() => {
+    setOffset(0);
+  }, [start, end]);
   useEffect(() => {
     const g = ++generation.current;
     setLoading(true);
     setError('');
     const t = setTimeout(() => {
-      void api<{ groups: typeof rows; total: number }>(
+      void api<{ groups: typeof rows; total: number; offset: number }>(
         '/projects/' +
           projectId +
           '/transcript-range?start=' +
@@ -137,6 +140,7 @@ export function Transcript({
           if (g === generation.current) {
             setRows(r.groups);
             setTotal(r.total);
+            setShownOffset(r.offset);
           }
         })
         .catch((e) => {
@@ -169,18 +173,22 @@ export function Transcript({
           <div className="review-pages">
             <Button
               variant="secondary"
-              disabled={!offset}
-              onClick={() => setOffset(Math.max(0, offset - 30))}
+              disabled={!shownOffset}
+              onClick={() => {
+                setOffset(Math.max(0, shownOffset - 30));
+              }}
             >
               Sebelumnya
             </Button>
             <span>
-              {total ? offset + 1 : 0}–{Math.min(offset + 30, total)} / {total} kelompok
+              {total ? shownOffset + 1 : 0}–{Math.min(shownOffset + 30, total)} / {total} kelompok
             </span>
             <Button
               variant="secondary"
-              disabled={offset + 30 >= total}
-              onClick={() => setOffset(offset + 30)}
+              disabled={shownOffset + 30 >= total}
+              onClick={() => {
+                setOffset(shownOffset + 30);
+              }}
             >
               Berikutnya
             </Button>

@@ -24,6 +24,7 @@ export const kindLabel = (kind: string) =>
     export: 'Ekspor',
     editor_media: 'Persiapan preview',
     audio_import: 'Impor audio',
+    review_audio: 'Persiapan audio sumber',
     library: 'Persiapan koleksi',
   })[kind] || kind;
 export function jobLabel(job: Job) {
