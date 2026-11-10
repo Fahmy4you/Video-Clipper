@@ -428,6 +428,9 @@ def jobs(id: str, s: DBSession = Depends(session)):
 
 
 def add_job(s, pid, kind, clip=None, payload=None, checkpoint=None):
+    # Admission lock is transaction-scoped and independent of the worker lock.
+    if kind == "export" and s.bind.dialect.name == "postgresql":
+        s.execute(text("SELECT pg_advisory_xact_lock(:lock)"), {"lock": 861470264})
     s.execute(select(Project).where(Project.id == pid).with_for_update()).scalar_one()
     active = list(s.scalars(select(Job).where(Job.project_id == pid, Job.status.in_(PENDING))))
     if kind in ("analysis", "mix") and any(j.kind in ("analysis", "mix") for j in active):
@@ -442,6 +445,13 @@ def add_job(s, pid, kind, clip=None, payload=None, checkpoint=None):
             and (kind == "editor_media" or j.payload == snapshot)
         ):
             return j
+    if kind == "export" and s.scalar(
+        select(Job.id).where(Job.kind == "export", Job.status.in_(PENDING)).limit(1)
+    ):
+        raise HTTPException(
+            409,
+            "Masih ada ekspor yang belum selesai. Tunggu hingga selesai atau batalkan melalui antrean.",
+        )
     if kind == "analysis":
         from .transcription import allow_manual_retry
         from .config import STORAGE

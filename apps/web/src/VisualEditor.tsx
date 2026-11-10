@@ -1,3 +1,4 @@
+import { useExportQueue, exportProgress } from './useExportQueue';
 import { PreviewScope, SubtitleSettings } from './SubtitleSettings';
 import { ExportDialog } from './ExportDialog';
 import { watchExport } from './ExportDownloads';
@@ -569,6 +570,7 @@ export function VisualEditor() {
       setError((e as Error).message);
     }
   }
+  const exportQueue = useExportQueue();
   async function startExport(resolution: number) {
     setPlaying(false);
     await save();
@@ -577,8 +579,11 @@ export function VisualEditor() {
     if (state.dirty || state.conflict)
       throw new Error('Simpan perubahan dan selesaikan konflik sebelum ekspor.');
     const job = await api<Job>('/clips/' + state.draft!.id + '/exports', 'POST', { resolution });
+    exportQueue.accepted(job);
+    setExportOpen(false);
     watchExport(job);
-    await refresh();
+    void exportQueue.refresh();
+    void refresh();
   }
   function addOverlay(kind: 'text' | 'image', asset?: Asset) {
     if (!row) return;
@@ -784,6 +789,11 @@ export function VisualEditor() {
           </Button>
         </div>
       </header>
+      {exportQueue.jobs.length > 0 && (
+        <div className="notice" role="status">
+          {exportProgress(exportQueue.jobs[0])}
+        </div>
+      )}
       {exportConfig?.error && (
         <div className="notice" role="alert">
           Konfigurasi ekspor: {exportConfig.error}
@@ -1875,6 +1885,7 @@ export function VisualEditor() {
         jobs={outputs}
         config={exportConfig}
         start={startExport}
+        queue={exportQueue}
       />
     </main>
   );

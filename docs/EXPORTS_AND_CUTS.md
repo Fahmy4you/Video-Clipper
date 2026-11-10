@@ -49,3 +49,11 @@ Dialog Ekspor menyediakan 360p, 720p, dan 1080p (default). Dimensi mengikuti ras
 Permintaan POST ekspor menerima JSON opsional `{"resolution":360}`. Nilai yang diterima 360, 720, 1080. Permintaan tanpa body tetap memakai 1080. Snapshot pekerjaan mempertahankan resolusi untuk retry. Mode Local menggunakan tujuan .env dan tidak memulai unduhan browser.
 
 Preview studio menyiapkan posisi masuk media di awal, memakai ulang maksimal empat decoder visual, dan menyimpan frame terpilih sampai 64 MiB. Pesan menunggu baru terlihat setelah 400 ms. Persiapan memeriksa posisi penting, lalu decoding berjalan bertahap selama playback.
+
+## Pencegahan antrean ekspor ganda
+
+Setelah server menerima ekspor, modal langsung tertutup. Status tetap terlihat di studio dan pemantauan unduhan berjalan di luar modal. Kegagalan menyimpan atau mengirim mempertahankan modal beserta pesannya.
+
+Workspace menerima satu ekspor yang belum selesai: status queued, running, cancelling, waiting_service, waiting_network, dan waiting_quota memblokir ekspor tambahan. Penguncian transaksi PostgreSQL melindungi submit dan retry, termasuk dari tab/proyek lain. Permintaan dengan highlight dan snapshot identik memakai pekerjaan aktif yang sama; permintaan berbeda ditolak dengan HTTP 409. Ekspor lama yang sudah mengantre tetap diproses.
+
+Modal tetap dapat dibuka untuk riwayat dan unduhan, tetapi tombol Mulai ekspor nonaktif selama ada ekspor pending atau status antrean belum dapat diperiksa. Status global diperiksa setiap tiga detik serta setelah submit/retry. Setelah pekerjaan selesai, gagal, atau dibatalkan, ekspor baru diperbolehkan. Pekerjaan selain ekspor tetap menggunakan antrean berat bersama seperti sebelumnya.

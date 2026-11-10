@@ -88,6 +88,9 @@ export async function api<T>(path: string, method = 'GET', body?: unknown): Prom
       { status: r.status },
     );
   }
+  if (method === 'POST' && /\/jobs\/[^/]+\/retry$/.test(path)) {
+    window.dispatchEvent(new Event('vc-export-queue'));
+  }
   return data;
 }
 export function stamp(t: number) {

@@ -1,3 +1,4 @@
+import { isPending } from './components/QueueStatus';
 import { useEffect, useState } from 'react';
 import { Download, X } from 'lucide-react';
 import { api, type Job } from './api';
@@ -43,11 +44,7 @@ export function ExportDownloads() {
             continue;
           }
           if (!live) return;
-          if (
-            ['queued', 'running', 'waiting_service', 'waiting_quota', 'cancelling'].includes(
-              j.status,
-            )
-          ) {
+          if (isPending(j)) {
             seenPending.add(j.id);
             continue;
           }

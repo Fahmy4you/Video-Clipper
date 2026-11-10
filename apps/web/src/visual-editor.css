@@ -1734,3 +1734,20 @@
     min-width: 0;
   }
 }
+
+.export-queue-check {
+  display: grid;
+  gap: 12px;
+  font-size: 13px;
+}
+.export-queue-check p {
+  margin: 0;
+}
+.export-queue-check button {
+  justify-self: start;
+  min-height: 44px;
+  cursor: pointer;
+}
+.export-queue-check button:disabled {
+  cursor: not-allowed;
+}

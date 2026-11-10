@@ -1,3 +1,4 @@
+import { type useExportQueue } from './useExportQueue';
 import { useId, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, Download, History, Loader2 } from 'lucide-react';
 import { Dialog } from './components/Ui';
@@ -13,6 +14,7 @@ export function ExportDialog({
   jobs,
   config,
   start,
+  queue,
 }: {
   open: boolean;
   onClose: () => void;
@@ -21,6 +23,7 @@ export function ExportDialog({
   jobs: Job[];
   config: Config | null;
   start: (resolution: number) => Promise<void>;
+  queue: ReturnType<typeof useExportQueue>;
 }) {
   const [resolution, setResolution] = useState(1080),
     [busy, setBusy] = useState(false),
@@ -46,9 +49,9 @@ export function ExportDialog({
           <button
             className="button primary"
             aria-label={busy ? 'Memulai ekspor…' : 'Mulai ekspor'}
-            disabled={busy || !config?.ready || !plan}
+            disabled={busy || queue.blocked || !config?.ready || !plan}
             onClick={async () => {
-              if (submitting.current) return;
+              if (submitting.current || queue.blocked) return;
               submitting.current = true;
               setBusy(true);
               setError('');
@@ -56,6 +59,7 @@ export function ExportDialog({
                 await start(resolution);
               } catch (e) {
                 setError((e as Error).message);
+                void queue.refresh();
               } finally {
                 submitting.current = false;
                 setBusy(false);
@@ -72,6 +76,23 @@ export function ExportDialog({
         </>
       }
     >
+      {queue.jobs.length > 0 && (
+        <p className="export-error" role="status">
+          Masih ada ekspor yang belum selesai. Tunggu hingga selesai atau batalkan melalui antrean.
+        </p>
+      )}
+      {(!queue.known || queue.error) && (
+        <div className="export-queue-check" role="status">
+          <p>{queue.error || 'Memeriksa status ekspor…'}</p>
+          <button
+            className="button secondary"
+            disabled={queue.checking}
+            onClick={() => void queue.refresh()}
+          >
+            Periksa ulang
+          </button>
+        </div>
+      )}
       <div className="export-resolution">
         <label htmlFor={resolutionId}>Resolusi</label>
         <select
