@@ -283,7 +283,11 @@ def render_v2(
     for i, s in enumerate(plan["segments"]):
         check()
         progress("Menyiapkan potongan video", 15 + round(i / max(1, len(plan["segments"])) * 15))
-        t = s["transform"]
+        t = (
+            s.get("image_transform") or {**s["transform"], "mode": "fit", "scale": 1}
+            if s.get("image_asset_id")
+            else s["transform"]
+        )
         ph = h // 2 if t["mode"] == "split" else h
 
         def pane(x):
@@ -304,21 +308,23 @@ def render_v2(
         segment_offset += s["duration"]
         dur = s["duration"] / 30
         target = work / f"{i:03}.mkv"
-        args = [
-            "ffmpeg",
-            "-y",
-            "-v",
-            "error",
-            "-threads",
-            "2",
-            "-ss",
-            str(s["source_in"] / 30),
-            "-i",
-            str(source),
-        ]
+        source_audio_index = 0
+        args = ["ffmpeg", "-y", "-v", "error", "-threads", "2"]
+        if s.get("image_asset_id"):
+            from uuid import UUID
+
+            image_path = (
+                source.parent / "replacement-images" / (str(UUID(s["image_asset_id"])) + ".png")
+            )
+            args += ["-loop", "1", "-framerate", "30", "-i", str(image_path)]
+            args += ["-ss", str(s["source_in"] / 30), "-i", str(source)]
+            source_audio_index = 1
+        else:
+            args += ["-ss", str(s["source_in"] / 30), "-i", str(source)]
         if not audio:
             args += ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]
-        vf += f";[{'0' if audio else '1'}:a]aresample=48000,asetpts=PTS-STARTPTS,apad,atrim=duration={dur}[aout]"
+        audio_index = source_audio_index if audio else source_audio_index + 1
+        vf += f";[{audio_index}:a]aresample=48000,asetpts=PTS-STARTPTS,apad,atrim=duration={dur}[aout]"
         args += [
             "-filter_complex_threads",
             "1",
@@ -394,10 +400,17 @@ def render_v2(
         offset = 0
         items = []
         for segment in plan["segments"]:
-            items.extend(
-                {**b, "start": b["start"] + offset, "end": b["end"] + offset}
-                for b in segment["broll"]
-            )
+            for b in segment["broll"]:
+                item = {**b, "start": b["start"] + offset, "end": b["end"] + offset}
+                if b.get("image_asset_id"):
+                    from uuid import UUID
+
+                    item["image_path"] = str(
+                        source.parent
+                        / "replacement-images"
+                        / (str(UUID(b["image_asset_id"])) + ".png")
+                    )
+                items.append(item)
             offset += segment["duration"]
         if plan.get("transition_version") == 1:
             items = [

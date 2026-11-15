@@ -853,6 +853,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{id}/replacement-images": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload Replacement Image */
+        post: operations["upload_replacement_image_api_projects__id__replacement_images_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/replacement-images/{asset_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Replacement Image */
+        delete: operations["delete_replacement_image_api_projects__id__replacement_images__asset_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/assets/{id}/{asset_id}": {
         parameters: {
             query?: never;
@@ -1156,6 +1190,11 @@ export interface components {
              */
             mode: string;
         };
+        /** Body_upload_replacement_image_api_projects__id__replacement_images_post */
+        Body_upload_replacement_image_api_projects__id__replacement_images_post: {
+            /** File */
+            file: string;
+        };
         /** BoundaryTransition */
         BoundaryTransition: {
             /** Id */
@@ -1174,6 +1213,9 @@ export interface components {
             id: string;
             /** Asset Id */
             asset_id: string;
+            /** Image Asset Id */
+            image_asset_id?: string | null;
+            image_transform?: components["schemas"]["Transform"] | null;
             /** Start */
             start: number;
             /** End */
@@ -1953,6 +1995,9 @@ export interface components {
             source_in: number;
             /** Duration */
             duration: number;
+            /** Image Asset Id */
+            image_asset_id?: string | null;
+            image_transform?: components["schemas"]["Transform"] | null;
             transform?: components["schemas"]["Transform"];
             /** Captions */
             captions?: components["schemas"]["Caption"][];
@@ -4376,6 +4421,73 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_replacement_image_api_projects__id__replacement_images_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_replacement_image_api_projects__id__replacement_images_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_replacement_image_api_projects__id__replacement_images__asset_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

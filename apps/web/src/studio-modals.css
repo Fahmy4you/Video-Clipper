@@ -680,3 +680,86 @@ body:has(.visual-editor) .source-modal textarea {
 .subtitle-review .check {
   min-height: 44px;
 }
+
+.replacement-image-dialog {
+  width: min(560px, calc(100vw - 24px));
+  max-height: min(90dvh, 760px);
+}
+.replacement-image-content {
+  display: grid;
+  gap: 16px;
+}
+.replacement-image-input {
+  display: none;
+}
+.replacement-image-picker {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 250px;
+  padding: 16px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  background: var(--surface-alt);
+  color: var(--muted);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+.replacement-image-picker:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--surface-alt) 82%, var(--accent));
+}
+.replacement-image-picker:focus-visible {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.replacement-image-picker:disabled {
+  cursor: not-allowed;
+}
+.replacement-image-picker img {
+  display: block;
+  max-width: 100%;
+  max-height: min(52dvh, 440px);
+  object-fit: contain;
+}
+.replacement-image-picker span,
+.replacement-image-picker small {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.replacement-image-picker span {
+  font-weight: 500;
+}
+.replacement-image-picker small {
+  font-size: 12px;
+}
+.replacement-image-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 13px;
+}
+.replacement-image-dialog footer {
+  gap: 8px;
+}
+.replacement-image-dialog footer > button {
+  min-height: 44px;
+  cursor: pointer;
+}
+.replacement-image-dialog footer > button:disabled,
+.replacement-image-content > button:disabled {
+  cursor: not-allowed;
+}
+@media (max-width: 560px) {
+  .replacement-image-dialog {
+    padding: 16px;
+  }
+  .replacement-image-dialog footer > button {
+    flex: 1;
+  }
+  .replacement-image-picker {
+    min-height: 190px;
+  }
+}

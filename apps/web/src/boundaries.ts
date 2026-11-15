@@ -9,6 +9,7 @@ export type BoundaryTransition = { id: string; left: string; right: string; valu
 export type VisualSpan = {
   key: string;
   kind: 'podcast' | 'broll';
+  image_asset_id?: string | null;
   start: number;
   end: number;
   source_in: number;
@@ -36,14 +37,20 @@ export function visualSpans(p: Plan) {
           start: offset + a,
           end: offset + b,
           source_in: s.source_in + a,
-          transform: s.transform,
+          transform: s.image_asset_id
+            ? s.image_transform || { ...s.transform, mode: 'fit', scale: 1 }
+            : s.transform,
           segmentId: s.id,
+          image_asset_id: s.image_asset_id,
         });
     };
     for (const b of [...(s.broll || [])].sort((a, b) => a.start - b.start)) {
       podcast(cursor, b.start);
       const item: VisualSpan = {
           ...b,
+          transform: b.image_asset_id
+            ? b.image_transform || { ...b.transform, mode: 'fit', scale: 1 }
+            : b.transform,
           key: 'b:' + (b.visual_id || b.id),
           kind: 'broll',
           start: offset + b.start,
@@ -56,6 +63,7 @@ export function visualSpans(p: Plan) {
         last.key === item.key &&
         last.end === item.start &&
         last.source_in + last.end - last.start === item.source_in &&
+        last.image_asset_id === item.image_asset_id &&
         JSON.stringify(last.transform) === JSON.stringify(item.transform)
       ) {
         last.end = item.end;
@@ -103,6 +111,8 @@ export function normalizeTransitions(p: Plan) {
           old &&
           old.end === start &&
           old.b.asset_id === b.asset_id &&
+          old.b.image_asset_id === b.image_asset_id &&
+          JSON.stringify(old.b.image_transform) === JSON.stringify(b.image_transform) &&
           old.b.source_in + old.b.end - old.b.start === b.source_in &&
           JSON.stringify(old.b.transform) === JSON.stringify(b.transform);
       if (!b.visual_id) {
@@ -169,6 +179,7 @@ export function boundaryEvents(p: Plan, frames: Record<string, number> = {}) {
       fallback = false;
     if (kind === 'crossfade' && half)
       for (const span of [e.before, e.after]) {
+        if (span?.image_asset_id) continue;
         const start = span ? span.source_in + e.frame - half - span.start : -1,
           limit = span ? frames[span.asset_id || 'podcast'] : undefined;
         if (start < 0 || (limit !== undefined && start + half * 2 > limit)) {

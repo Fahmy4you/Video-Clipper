@@ -3,7 +3,7 @@
 from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
-RENDER_VERSION = "subtitle-templates-4"
+RENDER_VERSION = "subtitle-templates-4-image-replacement-1"
 from .timeline import RESOLUTIONS
 
 
@@ -26,6 +26,12 @@ def render_identity(source, plan, ratio, resolution):
 
     paths = {Path(source)}
     for segment in plan.get("segments", []):
+        for image_id in [
+            segment.get("image_asset_id"),
+            *(b.get("image_asset_id") for b in segment.get("broll", [])),
+        ]:
+            if image_id:
+                paths.add(source.parent / "replacement-images" / (str(UUID(image_id)) + ".png"))
         for broll in segment.get("broll", []):
             paths.add(STORAGE / "video-clips" / str(UUID(broll["asset_id"])) / "source.media")
         for overlay in segment.get("overlays", []):

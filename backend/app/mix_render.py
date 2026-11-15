@@ -38,10 +38,14 @@ def limits(item, items, duration, frames):
             )
         )
         kind = edge["kind"]
-        if kind == "crossfade" and (
-            item["source_in"] < half
-            if enter
-            else item["source_in"] + item["end"] - item["start"] + half > frames
+        if (
+            kind == "crossfade"
+            and not item.get("image_asset_id")
+            and (
+                item["source_in"] < half
+                if enter
+                else item["source_in"] + item["end"] - item["start"] + half > frames
+            )
         ):
             kind = "black"
         result.append((kind, half if kind != "none" else 0))
@@ -62,11 +66,24 @@ def composite(base, segment, out, w, h, check):
         (ki, hi), (ko, ho) = limits(item, items, duration, meta["frames"])
         hi = 0 if ki == "flash" else hi
         ho = 0 if ko == "flash" else ho
-        pre = min(item["source_in"], math.ceil(hi))
+        pre = 0 if item.get("image_asset_id") else min(item["source_in"], math.ceil(hi))
         src = (item["source_in"] - pre) / 30
         delay = (item["start"] - pre) / 30
-        args += ["-ss", str(src), "-i", str(root / "source.media")]
-        t = item["transform"]
+        if item.get("image_asset_id"):
+            from uuid import UUID
+
+            # Project-owned still image path is injected by render_v2.
+            image = item.get("image_path")
+            if not image:
+                raise ValueError("Gambar sisipan tidak tersedia.")
+            args += ["-loop", "1", "-framerate", "30", "-i", str(image)]
+        else:
+            args += ["-ss", str(src), "-i", str(root / "source.media")]
+        t = (
+            (item.get("image_transform") or {**item["transform"], "mode": "fit", "scale": 1})
+            if item.get("image_asset_id")
+            else item["transform"]
+        )
         scale = t["scale"]
         mode = "decrease" if t["mode"] == "fit" else "increase"
         vf = (

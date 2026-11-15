@@ -121,6 +121,8 @@ class Broll(Strict):
     visual_id: str | None = Field(default=None, max_length=100)
     id: str = Field(max_length=100)
     asset_id: str = Field(max_length=36)
+    image_asset_id: str | None = Field(default=None, max_length=36)
+    image_transform: Transform | None = None
     start: int = Field(ge=0)
     end: int = Field(gt=0)
     source_in: int = Field(default=0, ge=0)
@@ -162,6 +164,8 @@ class Segment(Strict):
     id: str = Field(max_length=100)
     source_in: int = Field(ge=0)
     duration: int = Field(gt=0)
+    image_asset_id: str | None = Field(default=None, max_length=36)
+    image_transform: Transform | None = None
     transform: Transform = Field(default_factory=Transform)
     captions: list[Caption] = Field(default_factory=list, max_length=2000)
     overlays: list[Overlay] = Field(default_factory=list, max_length=100)

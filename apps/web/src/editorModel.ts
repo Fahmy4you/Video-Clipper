@@ -94,18 +94,21 @@ export type AudioAsset = {
   waveform_interval: number;
   origin: string;
 };
+export type Transform = {
+  legacy_center?: boolean;
+  mode: 'fit' | 'fill' | 'split';
+  x: number;
+  y: number;
+  scale: number;
+  b: number;
+};
 export type Segment = {
   id: string;
   source_in: number;
   duration: number;
-  transform: {
-    legacy_center?: boolean;
-    mode: 'fit' | 'fill' | 'split';
-    x: number;
-    y: number;
-    scale: number;
-    b: number;
-  };
+  image_asset_id?: string | null;
+  image_transform?: Transform | null;
+  transform: Transform;
   captions: Caption[];
   overlays: Overlay[];
   excluded_word_ids: string[];
@@ -184,7 +187,14 @@ export type Project = {
   };
 };
 export type SourceWord = { start: number; end: number; text: string };
-export type Asset = { id: string; name: string; width: number; height: number; url: string };
+export type Asset = {
+  id: string;
+  name: string;
+  width: number;
+  height: number;
+  url: string;
+  replacement?: boolean;
+};
 export type Manifest = {
   status: string;
   proxy_url?: string;
@@ -574,11 +584,13 @@ export type Broll = {
   visual_id?: string | null;
   id: string;
   asset_id: string;
+  image_asset_id?: string | null;
+  image_transform?: Transform | null;
   start: number;
   end: number;
   source_in: number;
   reason: string;
-  transform: Segment['transform'];
+  transform: Transform;
   transition_in: Transition;
   transition_out: Transition;
 };

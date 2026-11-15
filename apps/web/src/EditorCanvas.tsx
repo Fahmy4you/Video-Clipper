@@ -139,7 +139,7 @@ export function EditorCanvas(props: Props) {
   latest.current = props;
   const format = formats.find((f) => f.id === props.ratio) || formats[0],
     media = useRef<PreviewMedia | null>(null),
-    chosen = useRef(new Map<string, PreviewFrame>()),
+    chosen = useRef(new Map<string, PreviewFrame | HTMLImageElement>()),
     buffered = useRef(false),
     layers = useRef(new Map<string, HTMLCanvasElement>()),
     sharpeners = useRef(new Map<string, Sharpener>());
@@ -258,8 +258,18 @@ export function EditorCanvas(props: Props) {
       lc.fillStyle = '#000';
       lc.fillRect(0, 0, w, h);
       const pane = (position: number, top: number, ph: number) => {
-        const nw = node instanceof HTMLVideoElement ? node.videoWidth : node.width,
-          nh = node instanceof HTMLVideoElement ? node.videoHeight : node.height;
+        const nw =
+            node instanceof HTMLVideoElement
+              ? node.videoWidth
+              : node instanceof HTMLImageElement
+                ? node.naturalWidth
+                : node.width,
+          nh =
+            node instanceof HTMLVideoElement
+              ? node.videoHeight
+              : node instanceof HTMLImageElement
+                ? node.naturalHeight
+                : node.height;
         const scale =
             (t.mode === 'fit' ? Math.min(w / nw, ph / nh) : Math.max(w / nw, ph / nh)) * t.scale,
           vw = nw * scale,
@@ -335,14 +345,29 @@ export function EditorCanvas(props: Props) {
     }
   };
   useEffect(() => {
+    const needed = new Set<string>();
+    for (const segment of props.plan.segments) {
+      if (segment.image_asset_id) needed.add(segment.image_asset_id);
+      for (const broll of segment.broll || [])
+        if (broll.image_asset_id) needed.add(broll.image_asset_id);
+      for (const overlay of segment.overlays)
+        if (overlay.kind === 'image' && overlay.asset_id) needed.add(overlay.asset_id);
+    }
+    for (const [id, image] of images.current) {
+      if (!needed.has(id)) {
+        image.onload = null;
+        image.src = '';
+        images.current.delete(id);
+      }
+    }
     for (const a of props.assets) {
-      if (images.current.has(a.id)) continue;
+      if (!needed.has(a.id) || images.current.has(a.id)) continue;
       const im = new Image();
       im.onload = () => paint.current(true);
       im.src = a.url;
       images.current.set(a.id, im);
     }
-  }, [props.assets]);
+  }, [props.assets, props.plan]);
   useEffect(() => {
     const v = video.current!,
       manager = new PreviewMedia(container.current!, (s) => latest.current.onQualityWarning(s));
@@ -396,7 +421,7 @@ export function EditorCanvas(props: Props) {
         row = atFrame(p.plan, p.frame),
         target = (row.s.source_in + p.frame - row.start) / 30;
       const spans = visualSpans(p.plan),
-        inventory = spans.map((s) => need(s, s.start, true));
+        inventory = spans.filter((s) => !s.image_asset_id).map((s) => need(s, s.start, true));
       const extras = p.plan.segments.flatMap((s) => [
         ...s.overlays
           .filter((o) => o.kind === 'image')
@@ -492,17 +517,24 @@ export function EditorCanvas(props: Props) {
       ]);
       const active = visualLayers(p.plan, p.frame, limits);
       const needs = spans.flatMap((span) => {
+        if (span.image_asset_id) return [];
         const used = active.some((x) => x.span.key === span.key && x.span.start === span.start);
         if (!used && (span.start < p.frame || span.start - p.frame > 90)) return [];
         return [need(span, p.frame, used)];
       });
       const state = manager.update(needs, p.playing);
-      chosen.current = new Map(
-        active.flatMap(({ span }) => {
+      const selectedVisuals = new Map<string, PreviewFrame | HTMLImageElement>();
+      for (const { span } of active) {
+        if (span.image_asset_id) {
+          const value = images.current.get(span.image_asset_id);
+          if (value?.complete && value.naturalWidth)
+            selectedVisuals.set(span.key + '@' + span.start, value);
+        } else {
           const value = state.chosen.get(need(span, p.frame, true).id);
-          return value ? [[span.key + '@' + span.start, value] as const] : [];
-        }),
-      );
+          if (value) selectedVisuals.set(span.key + '@' + span.start, value);
+        }
+      }
+      chosen.current = selectedVisuals;
       const mainReady =
         v.readyState >= 2 &&
         v.videoWidth > 0 &&

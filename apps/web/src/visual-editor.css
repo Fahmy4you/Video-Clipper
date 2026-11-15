@@ -815,6 +815,12 @@
   flex-shrink: 0;
   pointer-events: none;
 }
+.filmstrip img.replacement-filmstrip,
+.broll-filmstrip img.replacement-filmstrip {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
 .filmstrip span {
   width: 70px;
   background: #334155;

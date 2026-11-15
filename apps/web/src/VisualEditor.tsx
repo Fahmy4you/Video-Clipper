@@ -15,7 +15,7 @@ import { BrollPicker } from './BrollPicker';
 import { DuplicateBroll } from './DuplicateBroll';
 import './studio-modals.css';
 import { ThemeSelect } from './components/Theme';
-import { useConfirm } from './components/Ui';
+import { Dialog, useConfirm } from './components/Ui';
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import {
@@ -189,6 +189,14 @@ export function VisualEditor() {
     }
   }
   const [videoAssets, setVideoAssets] = useState<VideoAsset[]>([]),
+    [replacementTarget, setReplacementTarget] = useState<{
+      segmentId: string;
+      brollId?: string;
+    } | null>(null),
+    [replacementFile, setReplacementFile] = useState<File | null>(null),
+    [replacementPreviewUrl, setReplacementPreviewUrl] = useState(''),
+    [replacementBusy, setReplacementBusy] = useState(false),
+    [replacementError, setReplacementError] = useState(''),
     [picker, setPicker] = useState<{
       segmentId: string;
       start: number;
@@ -216,7 +224,12 @@ export function VisualEditor() {
   const savingPromise = useRef<Promise<void> | null>(null),
     refreshing = useRef(false),
     prepared = useRef(false),
-    upload = useRef<HTMLInputElement>(null);
+    upload = useRef<HTMLInputElement>(null),
+    replacementFileInput = useRef<HTMLInputElement>(null),
+    mounted = useRef(true),
+    mountedProjectId = useRef(id),
+    cleanupAttempts = useRef(new Set<string>());
+  mountedProjectId.current = id;
   async function refresh() {
     if (!id || refreshing.current) return;
     refreshing.current = true;
@@ -267,6 +280,12 @@ export function VisualEditor() {
       refreshing.current = false;
     }
   }
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, [id]);
   useEffect(() => {
     prepared.current = false;
     void refresh();
@@ -323,6 +342,38 @@ export function VisualEditor() {
     }, 1000);
     return () => clearTimeout(t);
   }, [draft, dirty, transaction, conflict, saving, saveFailed]);
+  const replacementIds = (clip: Clip | null) => {
+    const ids = new Set<string>();
+    for (const segment of clip?.plan.segments || []) {
+      if (segment.image_asset_id) ids.add(segment.image_asset_id);
+      for (const broll of segment.broll || [])
+        if (broll.image_asset_id) ids.add(broll.image_asset_id);
+    }
+    return ids;
+  };
+  useEffect(() => {
+    if (!id || !draft || draft.project_id !== id || dirty || transaction) return;
+    const retained = new Set<string>([
+      ...replacementIds(draft),
+      ...past.flatMap((clip) => [...replacementIds(clip)]),
+      ...future.flatMap((clip) => [...replacementIds(clip)]),
+    ]);
+    for (const asset of assets) {
+      if (!asset.replacement || retained.has(asset.id) || cleanupAttempts.current.has(asset.id))
+        continue;
+      cleanupAttempts.current.add(asset.id);
+      void api(`/projects/${id}/replacement-images/${asset.id}`, 'DELETE')
+        .then(() => setAssets((current) => current.filter((item) => item.id !== asset.id)))
+        .catch(() => {});
+    }
+  }, [id, draft, dirty, transaction, past, future, assets, jobs]);
+  const pendingJobSignature = jobs
+    .filter((job) => isPending(job))
+    .map((job) => `${job.id}:${job.status}`)
+    .join('|');
+  useEffect(() => {
+    cleanupAttempts.current.clear();
+  }, [id, draft, past, future, pendingJobSignature]);
   useEffect(() => {
     function before(e: BeforeUnloadEvent) {
       if (useVisual.getState().dirty) {
@@ -380,7 +431,12 @@ export function VisualEditor() {
   const filterItem =
     selection?.kind === 'filter' ? plan?.filters?.find((f) => f.id === selection.id) : undefined;
   const brollAsset = videoAssets.find((a) => a.id === broll?.asset_id);
-  const displayTransform = broll?.transform || selectedSegment?.transform;
+  const displayTransform = broll?.image_asset_id
+    ? broll.image_transform || { ...broll.transform, mode: 'fit', scale: 1 }
+    : broll?.transform ||
+      (selectedSegment?.image_asset_id
+        ? selectedSegment.image_transform || { ...selectedSegment.transform, mode: 'fit', scale: 1 }
+        : selectedSegment?.transform);
   const soundAsset = audioAssets.find((a) => a.id === sound?.asset_id);
   const selectedStyle = caption
     ? scope === 'block'
@@ -411,7 +467,14 @@ export function VisualEditor() {
       if (s) {
         const b =
           selection?.kind === 'broll' ? s.broll?.find((b) => b.id === selection.id) : undefined;
-        Object.assign(b?.transform || s.transform, patch);
+        const target = b
+          ? b.image_asset_id
+            ? (b.image_transform ??= { ...b.transform, mode: 'fit', scale: 1 })
+            : b.transform
+          : s.image_asset_id
+            ? (s.image_transform ??= { ...s.transform, mode: 'fit', scale: 1 })
+            : s.transform;
+        Object.assign(target, patch);
       }
     });
   }
@@ -716,6 +779,85 @@ export function VisualEditor() {
     setAssets((a) => [...a, result]);
     addOverlay('image', result);
   }
+  function clearReplacementPreview() {
+    setReplacementFile(null);
+    setReplacementPreviewUrl('');
+  }
+  useEffect(() => () => {
+    if (replacementPreviewUrl) URL.revokeObjectURL(replacementPreviewUrl);
+  }, [replacementPreviewUrl]);
+  function openReplacement(target: { segmentId: string; brollId?: string }) {
+    setPlaying(false);
+    setReplacementError('');
+    clearReplacementPreview();
+    setReplacementTarget(target);
+  }
+  function discardReplacementDraft() {
+    clearReplacementPreview();
+    setReplacementTarget(null);
+    setReplacementError('');
+  }
+  function chooseReplacement(file: File) {
+    setReplacementError('');
+    if (file.size > 5 * 1024 * 1024) {
+      clearReplacementPreview();
+      setReplacementError('Ukuran gambar maksimal 5 MB.');
+      return;
+    }
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+      clearReplacementPreview();
+      setReplacementError('Gunakan gambar PNG, JPEG, atau WebP.');
+      return;
+    }
+    setReplacementPreviewUrl(URL.createObjectURL(file));
+    setReplacementFile(file);
+  }
+  async function applyReplacement() {
+    if (!replacementTarget || !replacementFile || !id || replacementBusy) return;
+    const target = replacementTarget,
+      projectId = id,
+      file = replacementFile;
+    setReplacementBusy(true);
+    setReplacementError('');
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const response = await fetch('/api/projects/' + projectId + '/replacement-images', {
+        method: 'POST',
+        body: form,
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok)
+        throw new Error(result?.detail || 'Gagal menyimpan gambar. Periksa koneksi server lalu coba lagi.');
+      const asset = result as Asset;
+      if (!mounted.current || mountedProjectId.current !== projectId) {
+        await api('/projects/' + projectId + '/replacement-images/' + asset.id, 'DELETE').catch(() => {});
+        return;
+      }
+      setAssets((current) => [...current.filter((item) => item.id !== asset.id), asset]);
+      const fit = { mode: 'fit' as const, x: 0.5, y: 0.5, scale: 1, b: 0.5 };
+      change((clip) => {
+        const segment = clip.plan.segments.find((item) => item.id === target.segmentId);
+        if (!segment) return;
+        if (target.brollId) {
+          const item = segment.broll?.find((candidate) => candidate.id === target.brollId);
+          if (item) {
+            item.image_asset_id = asset.id;
+            item.image_transform ??= fit;
+          }
+        } else {
+          segment.image_asset_id = asset.id;
+          segment.image_transform ??= fit;
+        }
+      });
+      setReplacementTarget(null);
+      clearReplacementPreview();
+    } catch (e) {
+      setReplacementError((e as Error).message);
+    } finally {
+      setReplacementBusy(false);
+    }
+  }
   const seconds = (frames: number) => Number((frames / 30).toFixed(3));
   const outputs = jobs.filter(
     (j) => j.clip_id === draft?.id && ['preview', 'export'].includes(j.kind),
@@ -920,11 +1062,13 @@ export function VisualEditor() {
           />
           <small className="muted">PNG, JPEG, WebP · maks. 20 MB</small>
           <div className="asset-grid">
-            {assets.map((a) => (
-              <button key={a.id} onClick={() => addOverlay('image', a)} title={a.name}>
-                <img src={a.url} alt={a.name} />
-              </button>
-            ))}
+            {assets
+              .filter((asset) => !asset.replacement)
+              .map((a) => (
+                <button key={a.id} onClick={() => addOverlay('image', a)} title={a.name}>
+                  <img src={a.url} alt={a.name} />
+                </button>
+              ))}
           </div>
           <Button variant="secondary" disabled={!plan} onClick={() => chooseBroll()}>
             <Film size={16} />
@@ -1331,37 +1475,73 @@ export function VisualEditor() {
           )}
           {broll && selectedSegment && (
             <>
-              <p>{brollAsset?.title || 'Video koleksi'}</p>
-              <p className="muted">{broll.reason} · Audio klip dimatikan.</p>
+              <p>
+                {broll.image_asset_id
+                  ? assets.find((asset) => asset.id === broll.image_asset_id)?.name ||
+                    'Gambar pengganti'
+                  : brollAsset?.title || 'Video koleksi'}
+              </p>
+              <p className="muted">
+                {broll.image_asset_id
+                  ? 'Gambar menggantikan visual sisipan; audio podcast tetap digunakan.'
+                  : `${broll.reason} · Audio klip dimatikan.`}
+              </p>
               <div className="broll-actions">
+                {!broll.image_asset_id && (
+                  <>
+                    <button
+                      onClick={() =>
+                        setPicker({
+                          segmentId: selectedSegment.id,
+                          start: broll.start,
+                          end: broll.end,
+                          targetId: broll.id,
+                          assetId: broll.asset_id,
+                          sourceIn: broll.source_in,
+                        })
+                      }
+                    >
+                      <Scissors size={15} />
+                      Ubah bagian klip
+                    </button>
+                    <button
+                      onClick={() =>
+                        setPicker({
+                          segmentId: selectedSegment.id,
+                          start: broll.start,
+                          end: broll.end,
+                          targetId: broll.id,
+                        })
+                      }
+                    >
+                      <Replace size={15} />
+                      Ganti video
+                    </button>
+                  </>
+                )}
                 <button
                   onClick={() =>
-                    setPicker({
-                      segmentId: selectedSegment.id,
-                      start: broll.start,
-                      end: broll.end,
-                      targetId: broll.id,
-                      assetId: broll.asset_id,
-                      sourceIn: broll.source_in,
-                    })
+                    openReplacement({ segmentId: selectedSegment.id, brollId: broll.id })
                   }
                 >
-                  <Scissors size={15} />
-                  Ubah bagian klip
+                  <ImagePlus size={15} />
+                  {broll.image_asset_id ? 'Ganti gambar' : 'Ganti dengan gambar'}
                 </button>
-                <button
-                  onClick={() =>
-                    setPicker({
-                      segmentId: selectedSegment.id,
-                      start: broll.start,
-                      end: broll.end,
-                      targetId: broll.id,
-                    })
-                  }
-                >
-                  <Replace size={15} />
-                  Ganti video
-                </button>
+                {broll.image_asset_id && (
+                  <button
+                    onClick={() =>
+                      change((clip) => {
+                        const item = clip.plan.segments
+                          .find((x) => x.id === selectedSegment.id)
+                          ?.broll?.find((x) => x.id === broll.id);
+                        if (item) item.image_asset_id = null;
+                      })
+                    }
+                  >
+                    <Undo2 size={15} />
+                    Kembali ke video sisipan
+                  </button>
+                )}
                 <button onClick={remove}>
                   <Undo2 size={15} />
                   Kembali ke podcast
@@ -1685,18 +1865,50 @@ export function VisualEditor() {
                       }
                     />
                     <div className="broll-actions">
-                      <button onClick={() => chooseBroll(true)}>
-                        <Replace size={15} />
-                        Ganti dengan video sisipan
-                      </button>
+                      {!selectedSegment.image_asset_id ? (
+                        <>
+                          <button onClick={() => chooseBroll(true)}>
+                            <Replace size={15} />
+                            Ganti dengan video sisipan
+                          </button>
+                          <button
+                            onClick={() => openReplacement({ segmentId: selectedSegment.id })}
+                          >
+                            <ImagePlus size={15} />
+                            Ganti dengan gambar
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => openReplacement({ segmentId: selectedSegment.id })}
+                          >
+                            <ImagePlus size={15} />
+                            Ganti gambar
+                          </button>
+                          <button
+                            onClick={() =>
+                              change((clip) => {
+                                const item = clip.plan.segments.find(
+                                  (x) => x.id === selectedSegment.id,
+                                );
+                                if (item) item.image_asset_id = null;
+                              })
+                            }
+                          >
+                            <Undo2 size={15} />
+                            Kembali ke podcast
+                          </button>
+                        </>
+                      )}
                     </div>
                   </>
                 )}
                 <div className="ve-panel-heading inspector-subheading">
                   <SlidersHorizontal size={14} />
-                  Framing video
+                  Framing visual
                 </div>
-                <p className="muted">Geser video langsung di kanvas untuk mengatur posisi.</p>
+                <p className="muted">Geser visual langsung di kanvas untuk mengatur posisi.</p>
                 {broll && (
                   <p className="muted">
                     Fit menampilkan video utuh dengan ruang kosong bila perlu. Fill memenuhi kanvas
@@ -1810,6 +2022,7 @@ export function VisualEditor() {
         <EditorTimeline
           videoAssets={videoAssets}
           audioAssets={audioAssets}
+          assets={assets}
           plan={plan}
           frame={frame}
           playing={playing}
@@ -1877,6 +2090,76 @@ export function VisualEditor() {
           }}
         />
       )}
+      <Dialog
+        open={!!replacementTarget}
+        onClose={() => {
+          if (!replacementBusy) discardReplacementDraft();
+        }}
+        title="Ganti visual dengan gambar"
+        description="Pilih gambar PNG, JPEG, atau WebP hingga 5 MB. Gambar akan ditampilkan utuh di dalam frame."
+        className="replacement-image-dialog"
+        footer={
+          <>
+            <button
+              type="button"
+              disabled={replacementBusy}
+              onClick={discardReplacementDraft}
+            >
+              Batal
+            </button>
+            <button
+              type="button"
+              className="primary"
+              disabled={!replacementFile || replacementBusy}
+              onClick={() => void applyReplacement()}
+            >
+              {replacementBusy && <Loader2 size={16} className="spin" />}
+              {replacementBusy ? 'Menggunakan gambar…' : 'Gunakan gambar'}
+            </button>
+          </>
+        }
+      >
+        <div className="replacement-image-content">
+          <input
+            ref={replacementFileInput}
+            className="replacement-image-input"
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            aria-label="Pilih gambar pengganti"
+            disabled={replacementBusy}
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0];
+              event.currentTarget.value = '';
+              if (file) chooseReplacement(file);
+            }}
+          />
+          <button
+            type="button"
+            className="replacement-image-picker"
+            disabled={replacementBusy}
+            onClick={() => replacementFileInput.current?.click()}
+            aria-label={replacementFile ? 'Ganti pilihan gambar' : 'Pilih gambar'}
+          >
+            {replacementPreviewUrl ? (
+              <>
+                <img src={replacementPreviewUrl} alt="" />
+                <span>{replacementFile?.name} · Klik untuk mengganti gambar</span>
+              </>
+            ) : (
+              <>
+                <ImagePlus size={30} aria-hidden="true" />
+                <span>Klik untuk memilih gambar</span>
+                <small>PNG, JPEG, atau WebP · Maksimal 5 MB</small>
+              </>
+            )}
+          </button>
+          {replacementError && (
+            <p className="replacement-image-error" role="alert">
+              {replacementError}
+            </p>
+          )}
+        </div>
+      </Dialog>
       <ExportDialog
         open={exportOpen}
         onClose={() => setExportOpen(false)}

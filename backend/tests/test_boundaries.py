@@ -147,6 +147,199 @@ def test_real_podcast_cut_render(tmp_path, monkeypatch, kind):
     assert abs(event["start"] + event["length"] / 2 - 96000) <= 0.5
 
 
+def test_image_replacement_spans_and_crossfade_use_still_frame():
+    p = plan()
+    image_id = str(uuid4())
+    p["segments"][0]["image_asset_id"] = image_id
+    p["segments"][0]["image_transform"] = {"mode": "fit", "x": 0.5, "y": 0.5, "scale": 1, "b": 0.5}
+    broll_id = str(uuid4())
+    p["segments"][0]["broll"] = [
+        {
+            "id": "still-broll",
+            "asset_id": broll_id,
+            "image_asset_id": image_id,
+            "image_transform": {"mode": "fit", "x": 0.5, "y": 0.5, "scale": 1, "b": 0.5},
+            "start": 30,
+            "end": 60,
+            "source_in": 140,
+            "transform": {"mode": "fill", "x": 0.5, "y": 0.5, "scale": 1, "b": 0.7},
+            "transition_in": {"kind": "crossfade", "frames": 12},
+            "transition_out": {"kind": "none", "frames": 0},
+        }
+    ]
+    p = EditPlanV2.model_validate(p).model_dump()
+    p = normalize(p)
+    assert spans(p)[0]["image_asset_id"] == image_id
+    still = next(x for x in spans(p) if x["kind"] == "broll")
+    assert still["image_asset_id"] == image_id and still["transform"]["mode"] == "fit"
+    edge = next(x for x in events(p, {"podcast": 1, broll_id: 1}) if x["id"] == "p:a|b:still-broll")
+    assert edge["kind"] == "crossfade" and not edge["fallback"]
+
+
+def test_render_main_image_replacement_keeps_audio_and_fits_frame(tmp_path, monkeypatch):
+    from PIL import Image
+
+    monkeypatch.setitem(RESOLUTIONS, "4:3", (160, 120))
+    source = tmp_path / "source.mp4"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=red:s=160x120:r=30:d=2",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:sample_rate=48000:duration=2",
+            "-shortest",
+            "-c:v",
+            "libx264",
+            "-threads",
+            "1",
+            "-c:a",
+            "aac",
+            str(source),
+        ],
+        check=True,
+    )
+    asset_id = str(uuid4())
+    replacements = tmp_path / "replacement-images"
+    replacements.mkdir()
+    Image.new("RGB", (80, 120), (0, 0, 255)).save(replacements / f"{asset_id}.png")
+    p = plan()
+    p["segments"] = [p["segments"][0]]
+    p = normalize(p)
+    p["segments"][0].update(
+        source_in=0,
+        duration=60,
+        image_asset_id=asset_id,
+        image_transform={"mode": "fit", "x": 0.5, "y": 0.5, "scale": 1, "b": 0.5},
+    )
+    out = tmp_path / "still.mp4"
+    render_v2(source, p, out, ratio="4:3")
+    metadata = probe(out)
+    assert any(stream["codec_type"] == "audio" for stream in metadata["streams"])
+    frame = subprocess.check_output(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-i",
+            str(out),
+            "-frames:v",
+            "1",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "rgb24",
+            "-threads",
+            "1",
+            "-",
+        ]
+    )
+    pixels = np.frombuffer(frame, dtype=np.uint8).reshape(120, 160, 3)
+    assert pixels[60, 80, 2] > 220 and pixels[60, 80, 0] < 20
+    assert pixels[60, 10].max() < 20
+
+
+def test_render_broll_image_replacement_keeps_timing(tmp_path, monkeypatch):
+    from PIL import Image
+    from app import mix_render
+
+    monkeypatch.setitem(RESOLUTIONS, "4:3", (160, 120))
+    source = tmp_path / "source.mp4"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=red:s=160x120:r=30:d=3",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:sample_rate=48000:duration=3",
+            "-shortest",
+            "-c:v",
+            "libx264",
+            "-threads",
+            "1",
+            "-c:a",
+            "aac",
+            str(source),
+        ],
+        check=True,
+    )
+    library_id, image_id = str(uuid4()), str(uuid4())
+    library_folder = tmp_path / "library"
+    library_folder.mkdir()
+    (library_folder / "metadata.json").write_text(json.dumps({"frames": 90}))
+    monkeypatch.setattr(mix_render, "folder", lambda _asset_id: library_folder)
+    replacements = tmp_path / "replacement-images"
+    replacements.mkdir()
+    Image.new("RGB", (160, 120), (0, 0, 255)).save(replacements / f"{image_id}.png")
+    p = plan()
+    p["segments"] = [p["segments"][0]]
+    p["segments"][0].update(source_in=0, duration=90)
+    p["segments"][0]["broll"] = [
+        {
+            "id": "image-slot",
+            "asset_id": library_id,
+            "image_asset_id": image_id,
+            "image_transform": {"mode": "fit", "x": 0.5, "y": 0.5, "scale": 1, "b": 0.5},
+            "start": 30,
+            "end": 60,
+            "source_in": 0,
+            "reason": "test",
+            "transform": {"mode": "fill", "x": 0.5, "y": 0.5, "scale": 1, "b": 0.7},
+            "transition_in": {"kind": "none", "frames": 0},
+            "transition_out": {"kind": "none", "frames": 0},
+        }
+    ]
+    p = normalize(EditPlanV2.model_validate(p).model_dump())
+    out = tmp_path / "broll-image.mp4"
+    render_v2(source, p, out, ratio="4:3")
+    metadata = probe(out)
+    assert any(stream["codec_type"] == "audio" for stream in metadata["streams"])
+    raw = subprocess.check_output(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-ss",
+            "1.5",
+            "-i",
+            str(out),
+            "-frames:v",
+            "1",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "rgb24",
+            "-threads",
+            "1",
+            "-",
+        ]
+    )
+    pixel = np.frombuffer(raw, dtype=np.uint8).reshape(120, 160, 3)[60, 80]
+    assert pixel[2] > 220 and pixel[0] < 20
+    assert (
+        int(
+            next(stream for stream in metadata["streams"] if stream["codec_type"] == "video")[
+                "nb_frames"
+            ]
+        )
+        == 90
+    )
+
+
 def test_crossfade_fallback():
     p = normalize(plan())
     p["transitions"][1]["value"] = {"kind": "crossfade", "frames": 12}

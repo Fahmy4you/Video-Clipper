@@ -512,7 +512,19 @@ def validate_plan(plan, project, previous=None):
         raise HTTPException(422, str(e))
     if any(x["source_in"] + x["duration"] > round(project.duration * 30) for x in v2["segments"]):
         raise HTTPException(422, "Clip melebihi durasi sumber.")
+    replacement_root = project_dir(project.id) / "replacement-images"
     for segment in v2["segments"]:
+        for image_id in [
+            segment.get("image_asset_id"),
+            *(b.get("image_asset_id") for b in segment.get("broll", [])),
+        ]:
+            if image_id:
+                try:
+                    image_id = str(UUID(image_id))
+                except ValueError:
+                    raise HTTPException(422, "ID gambar pengganti tidak valid.")
+                if not (replacement_root / f"{image_id}.png").is_file():
+                    raise HTTPException(422, "Gambar pengganti tidak ditemukan pada proyek ini.")
         for item in segment.get("broll", []):
             try:
                 meta = json.loads((library_folder(item["asset_id"]) / "metadata.json").read_text())
@@ -826,11 +838,15 @@ def serve_editor_media(id: str, filename: str, s: DBSession = Depends(session)):
 def assets(id: str, s: DBSession = Depends(session)):
     get(s, Project, id)
     folder = project_dir(id) / "assets"
-    return (
+    replacements = project_dir(id) / "replacement-images"
+    result = (
         [json.loads(f.read_text()) for f in sorted(folder.glob("*.json"))]
         if folder.exists()
         else []
     )
+    if replacements.exists():
+        result.extend(json.loads(f.read_text()) for f in sorted(replacements.glob("*.json")))
+    return result
 
 
 @app.post("/api/projects/{id}/assets", status_code=201)
@@ -868,6 +884,73 @@ async def upload_asset(id: str, file: UploadFile = File(...), s: DBSession = Dep
     return result
 
 
+@app.post("/api/projects/{id}/replacement-images", status_code=201)
+async def upload_replacement_image(
+    id: str, file: UploadFile = File(...), s: DBSession = Depends(session)
+):
+    from PIL import Image, ImageOps, UnidentifiedImageError
+    from io import BytesIO
+    from uuid import uuid4
+    from .media import write_json
+
+    get(s, Project, id)
+    data = await file.read(5 * 1024 * 1024 + 1)
+    if len(data) > 5 * 1024 * 1024:
+        raise HTTPException(413, "Gambar maksimal 5 MB.")
+    try:
+        im = Image.open(BytesIO(data))
+        if im.format not in ("PNG", "JPEG", "WEBP") or getattr(im, "n_frames", 1) != 1:
+            raise HTTPException(422, "Gunakan PNG, JPEG, atau WebP statis.")
+        if im.width * im.height > 40000000:
+            raise HTTPException(422, "Resolusi gambar terlalu besar (maksimal 40 megapiksel).")
+        im = ImageOps.exif_transpose(im).convert("RGBA")
+    except (UnidentifiedImageError, OSError, Image.DecompressionBombError):
+        raise HTTPException(422, "Gambar tidak valid.")
+    aid = str(uuid4())
+    folder = project_dir(id) / "replacement-images"
+    folder.mkdir(exist_ok=True)
+    im.save(folder / f"{aid}.png")
+    result = {
+        "id": aid,
+        "name": Path(file.filename or "Gambar").name[:200],
+        "width": im.width,
+        "height": im.height,
+        "url": f"/api/assets/{id}/{aid}",
+        "replacement": True,
+    }
+    write_json(folder / f"{aid}.json", result)
+    return result
+
+
+@app.delete("/api/projects/{id}/replacement-images/{asset_id}")
+def delete_replacement_image(id: str, asset_id: str, s: DBSession = Depends(session)):
+    get(s, Project, id)
+    try:
+        aid = str(UUID(asset_id))
+    except ValueError:
+        raise HTTPException(404, "Gambar tidak ditemukan.")
+    folder = project_dir(id) / "replacement-images"
+    image = folder / f"{aid}.png"
+    metadata = folder / f"{aid}.json"
+    if not image.is_file():
+        return {"deleted": aid}
+    for clip in s.scalars(select(Clip).where(Clip.project_id == id)):
+        for segment in (clip.plan or {}).get("segments", []):
+            refs = [segment.get("image_asset_id")]
+            refs.extend(b.get("image_asset_id") for b in segment.get("broll", []))
+            if aid in refs:
+                raise HTTPException(409, "Gambar masih dipakai oleh video yang tersimpan.")
+    for job in s.scalars(select(Job).where(Job.project_id == id, Job.status.in_(PENDING))):
+        for segment in (job.payload or {}).get("plan", {}).get("segments", []):
+            refs = [segment.get("image_asset_id")]
+            refs.extend(b.get("image_asset_id") for b in segment.get("broll", []))
+            if aid in refs:
+                raise HTTPException(409, "Gambar masih dipakai oleh ekspor yang belum selesai.")
+    image.unlink(missing_ok=True)
+    metadata.unlink(missing_ok=True)
+    return {"deleted": aid}
+
+
 @app.get("/api/assets/{id}/{asset_id}")
 def asset(id: str, asset_id: str, s: DBSession = Depends(session)):
     get(s, Project, id)
@@ -876,6 +959,8 @@ def asset(id: str, asset_id: str, s: DBSession = Depends(session)):
     except ValueError:
         raise HTTPException(404)
     f = project_dir(id) / "assets" / f"{aid}.png"
+    if not f.is_file():
+        f = project_dir(id) / "replacement-images" / f"{aid}.png"
     if not f.is_file():
         raise HTTPException(404)
     return FileResponse(f, media_type="image/png")

@@ -22,11 +22,13 @@ import {
   type Manifest,
   type SourceWord,
   type AudioAsset,
+  type Asset,
 } from './editorModel';
 import type { Selection } from './EditorCanvas';
 type Props = {
   videoAssets: VideoAsset[];
   audioAssets: AudioAsset[];
+  assets: Asset[];
   plan: Plan;
   frame: number;
   playing: boolean;
@@ -519,34 +521,44 @@ export function EditorTimeline(p: Props) {
                           }}
                         >
                           <div className="filmstrip">
-                            {Array.from(
-                              { length: Math.min(30, Math.max(1, Math.ceil(sw / 72))) },
-                              (_, i) => {
-                                const source =
-                                  s.source_in / 30 +
-                                  ((s.duration / 30) * i) / Math.max(1, Math.ceil(sw / 72));
-                                const n = Math.min(
-                                  p.manifest.thumbnail_count || 1,
-                                  Math.floor(source / (p.manifest.thumbnail_interval || 5)) + 1,
-                                );
-                                return p.manifest.thumbnail_base ? (
-                                  <img
-                                    draggable={false}
-                                    key={i}
-                                    src={
-                                      p.manifest.thumbnail_base +
-                                      String(n).padStart(5, '0') +
-                                      '.jpg'
-                                    }
-                                  />
-                                ) : (
-                                  <span key={i} />
-                                );
-                              },
+                            {s.image_asset_id ? (
+                              <img
+                                className="replacement-filmstrip"
+                                src={p.assets.find((asset) => asset.id === s.image_asset_id)?.url}
+                                alt=""
+                                draggable={false}
+                              />
+                            ) : (
+                              Array.from(
+                                { length: Math.min(30, Math.max(1, Math.ceil(sw / 72))) },
+                                (_, i) => {
+                                  const source =
+                                    s.source_in / 30 +
+                                    ((s.duration / 30) * i) / Math.max(1, Math.ceil(sw / 72));
+                                  const n = Math.min(
+                                    p.manifest.thumbnail_count || 1,
+                                    Math.floor(source / (p.manifest.thumbnail_interval || 5)) + 1,
+                                  );
+                                  return p.manifest.thumbnail_base ? (
+                                    <img
+                                      draggable={false}
+                                      key={i}
+                                      src={
+                                        p.manifest.thumbnail_base +
+                                        String(n).padStart(5, '0') +
+                                        '.jpg'
+                                      }
+                                    />
+                                  ) : (
+                                    <span key={i} />
+                                  );
+                                },
+                              )
                             )}
                           </div>
                           <span className="video-item-title">
-                            Podcast · {timecode(s.source_in).slice(0, 5)} · {timecode(s.duration)}
+                            {s.image_asset_id ? 'Gambar' : 'Podcast'} ·{' '}
+                            {timecode(s.source_in).slice(0, 5)} · {timecode(s.duration)}
                           </span>
                           {(s.broll || []).map((b) => (
                             <div
@@ -583,43 +595,58 @@ export function EditorTimeline(p: Props) {
                               }}
                             >
                               <div className="broll-filmstrip">
-                                {Array.from(
-                                  {
-                                    length: Math.min(
-                                      30,
-                                      Math.max(
-                                        1,
-                                        Math.ceil((((b.end - b.start) / 30) * zoom) / 70),
+                                {b.image_asset_id ? (
+                                  <img
+                                    className="replacement-filmstrip"
+                                    src={
+                                      p.assets.find((asset) => asset.id === b.image_asset_id)?.url
+                                    }
+                                    alt=""
+                                    draggable={false}
+                                  />
+                                ) : (
+                                  Array.from(
+                                    {
+                                      length: Math.min(
+                                        30,
+                                        Math.max(
+                                          1,
+                                          Math.ceil((((b.end - b.start) / 30) * zoom) / 70),
+                                        ),
                                       ),
-                                    ),
-                                  },
-                                  (_, i) => {
-                                    const a = p.videoAssets.find((a) => a.id === b.asset_id),
-                                      count = Math.max(
-                                        1,
-                                        Math.ceil((((b.end - b.start) / 30) * zoom) / 70),
+                                    },
+                                    (_, i) => {
+                                      const a = p.videoAssets.find((a) => a.id === b.asset_id),
+                                        count = Math.max(
+                                          1,
+                                          Math.ceil((((b.end - b.start) / 30) * zoom) / 70),
+                                        );
+                                      return (
+                                        <img
+                                          key={i}
+                                          draggable={false}
+                                          src={
+                                            a?.thumbnail_base +
+                                            String(
+                                              Math.floor(
+                                                (b.source_in + ((b.end - b.start) * i) / count) /
+                                                  30,
+                                              ) + 1,
+                                            ).padStart(5, '0') +
+                                            '.jpg'
+                                          }
+                                        />
                                       );
-                                    return (
-                                      <img
-                                        key={i}
-                                        draggable={false}
-                                        src={
-                                          a?.thumbnail_base +
-                                          String(
-                                            Math.floor(
-                                              (b.source_in + ((b.end - b.start) * i) / count) / 30,
-                                            ) + 1,
-                                          ).padStart(5, '0') +
-                                          '.jpg'
-                                        }
-                                      />
-                                    );
-                                  },
+                                    },
+                                  )
                                 )}
                               </div>
                               <span>
-                                {p.videoAssets.find((a) => a.id === b.asset_id)?.title || 'Klip'} ·{' '}
-                                {timecode(b.end - b.start)}
+                                {b.image_asset_id
+                                  ? 'Gambar pengganti'
+                                  : p.videoAssets.find((a) => a.id === b.asset_id)?.title ||
+                                    'Klip'}{' '}
+                                · {timecode(b.end - b.start)}
                               </span>
                               <i
                                 className="trim-handle left"

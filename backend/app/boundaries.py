@@ -20,8 +20,14 @@ def spans(plan):
                         start=offset + a,
                         end=offset + b,
                         source_in=s["source_in"] + a,
-                        transform=s["transform"],
+                        transform=(
+                            s.get("image_transform")
+                            or {**s["transform"], "mode": "fit", "scale": 1}
+                        )
+                        if s.get("image_asset_id")
+                        else s["transform"],
                         segment_id=s["id"],
+                        image_asset_id=s.get("image_asset_id"),
                     )
                 )
 
@@ -29,6 +35,11 @@ def spans(plan):
             podcast(cursor, b["start"])
             item = dict(
                 b,
+                transform=(
+                    b.get("image_transform") or {**b["transform"], "mode": "fit", "scale": 1}
+                )
+                if b.get("image_asset_id")
+                else b["transform"],
                 key="b:" + (b.get("visual_id") or b["id"]),
                 kind="broll",
                 start=offset + b["start"],
@@ -40,6 +51,7 @@ def spans(plan):
                 and out[-1]["key"] == item["key"]
                 and out[-1]["end"] == item["start"]
                 and out[-1]["source_in"] + out[-1]["end"] - out[-1]["start"] == item["source_in"]
+                and out[-1].get("image_asset_id") == item.get("image_asset_id")
                 and out[-1]["transform"] == item["transform"]
             ):
                 out[-1].update(end=item["end"], transition_out=item.get("transition_out", NONE))
@@ -99,6 +111,8 @@ def normalize(plan):
                     old
                     and old[2] == start
                     and old[0]["asset_id"] == b["asset_id"]
+                    and old[0].get("image_asset_id") == b.get("image_asset_id")
+                    and old[0].get("image_transform") == b.get("image_transform")
                     and old[0]["source_in"] + old[0]["end"] - old[0]["start"] == b["source_in"]
                     and old[0]["transform"] == b["transform"]
                 )
@@ -143,6 +157,8 @@ def events(plan, asset_frames=None):
                     kind = "black"
                     fallback = True
                     break
+                if span.get("image_asset_id"):
+                    continue
                 start = span["source_in"] + f - half - span["start"]
                 end = start + half * 2
                 limit = (asset_frames or {}).get(span.get("asset_id", "podcast"))
